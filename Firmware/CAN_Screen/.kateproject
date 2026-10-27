@@ -1,0 +1,15 @@
+{
+	"name": "CAN Screen extension",
+	"files": [ {	"directory": ".",
+			"filters": [ "*.h", "*.ino" ],
+			"recursive": 0
+		},
+		{	"directory": "./src",
+			"filters": [ "*.cpp", "*.hpp", "*.h" ],
+			"recursive": 1
+		},
+		{	"directory": "./python",
+			"filters": [ "*.py" ],
+			"recursive": 1
+		} ]
+}

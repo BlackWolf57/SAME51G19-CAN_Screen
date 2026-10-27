@@ -1,0 +1,6 @@
+(fp_lib_table
+  (version 7)
+  (lib (name "Divers")(type "KiCad")(uri "${CUSTOM}/Divers.pretty")(options "")(descr ""))
+  (lib (name "Computer")(type "KiCad")(uri "${CUSTOM}/Computer connectors.pretty")(options "")(descr ""))
+  (lib (name "Composants")(type "KiCad")(uri "${KIPRJMOD}/Composants/Composants.pretty")(options "")(descr ""))
+)
