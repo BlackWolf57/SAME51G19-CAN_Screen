@@ -149,10 +149,6 @@
 	class HIDSubDescriptor {
 	public:
 		HIDSubDescriptor *next_ = NULL;
-		//HIDSubDescriptor ( const void *_data_, const uint16_t _length_, const uint8_t _device_ ) : data ( _data_ ),
-		//											   length ( _length_ ),
-		//											   device ( _device_ ),
-		//											   interface ( _device_ + CDC_INTERFACE_COUNT )
 		HIDSubDescriptor ( const void *_data_, const uint16_t _length_, const uint8_t _device_ ) : data ( _data_ ),
 													   length ( _length_ ),
 													   device ( _device_ )

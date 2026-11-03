@@ -16,6 +16,28 @@
 #define HIGHFLOW2_DEVICE_NUMBER		(HIGHFLOW2_HID_INTERFACE_NUMBER - CDC_INTERFACE_COUNT)
 #define SCREEN_DEVICE_NUMBER		(SCREEN_HID_INTERFACE_NUMBER - CDC_INTERFACE_COUNT)
 
+#define POWERSTATE_TESTING(Ptr)		(((Ptr) -> PowerState == SENSOR_POWER_STATE_UNDEFINED) || ((Ptr) -> PowerState == SENSOR_POWER_STATE_D4_POWER_OFF))
+#define FEATURE_TESTING(Col)		((POWERSTATE_TESTING(Col.feature_Ptr_)) || ((Col.feature_Ptr_) -> Status != SENSOR_STATE_READY))
+
+enum : uint8_t {
+	Free_Collection,
+	First_Collection,
+	Second_Collection,
+	Both_Collection
+};
+
+struct Report_Collection_t {
+	union {
+		struct {
+			uint8_t First_Report: 1;
+			uint8_t Second_Report: 1;
+			__I uint8_t : 6;
+		};
+		uint8_t Report;
+	};
+	Report_Collection_t () : Report ( Free_Collection ) {}
+};
+
 typedef struct {
 	uint8_t featuresID [ MAX_FEATURE_REPORT ];
 	uint8_t queue;
@@ -60,6 +82,8 @@ typedef struct {
 	__I uint8_t : 1;
 } packed_t;
 
+
+
 _Pragma("pack(1)")
 	typedef struct {
 		uint8_t Connection;								// Taille:  1 Byte
@@ -86,26 +110,6 @@ _Pragma("pack(1)")
 	/* Device 1 - Sensor device !								*/
 	#if ENABLED(SENSORS_DEVICE)
 		typedef struct {
-			//uint8_t Status;
-			//uint8_t Event;
-			union {
-				struct {
-					int16_t Chip;
-					int16_t Box;
-				};
-				int16_t Temperature [ 2 ];
-			};
-		} hid_temperature_t;
-		typedef struct {
-			uint8_t Status;
-			uint8_t Event;
-			voltage_t voltages_;
-		} hid_monitor_t;
-		/*typedef struct {
-			hid_temperature_t hid_temps_;
-			hid_monitor_t hid_monitor_;
-		} HID_Device1_Input_Data_t;*/
-		typedef struct {
 			union {
 				struct {
 					int16_t Chip;						// Taille: *2 Bytes
@@ -131,8 +135,11 @@ _Pragma("pack(1)")
 
 		typedef struct {
 			features_t temperatures_features_;					// Taille: 10 Bytes
-			features_t flow_features_;						// Taille: 10 Bytes
-		} HID_Device2_Features_Data_t;							// Total:  20 Bytes !
+			struct {
+				features_t flow_features_;					// Taille: 11 Bytes
+				uint8_t Name [ 32 ];						// Taille: 32 Bytes
+			} flow_struct_;								// Taille: 42 Bytes
+		} HID_Device2_Features_Data_t;							// Total:  52 Bytes !
 	#endif
 
 	/* Device 3 - Screen device !								*/
@@ -155,30 +162,102 @@ _Pragma("pack(1)")
 	#endif
 _Pragma("pack()")
 
+typedef struct {
+	features_t* feature_Ptr_ = nullptr;
+	uint32_t Timing;
+
+	void set_FeaturePtr ( void* _Ptr_ )				{ this -> feature_Ptr_ = ( features_t* ) _Ptr_; }
+	void set_NewTiming ()						{ this -> Timing = millis (); }
+	void set_NewTiming ( uint8_t _Offset_ )				{ this -> Timing = ( millis () + _Offset_ ); }
+	uint32_t next_Timing ()						{ return ( this -> feature_Ptr_ == nullptr ? this -> Timing : this -> feature_Ptr_ -> Interval + this -> Timing ); }
+} timing_t;
+
+typedef struct {
+	timing_t _First_Collection;
+	timing_t _Second_Collection;
+	uint8_t _lastResult = Free_Collection;
+
+	void set_FeaturesPtr ( void* _Ptr1_, void* _Ptr2_ ) {
+		this -> _First_Collection.set_FeaturePtr ( _Ptr1_ );
+		this -> _Second_Collection.set_FeaturePtr ( _Ptr2_ );
+	}
+	void set_Timings ( uint32_t _timing1_, uint32_t _timing2_ ) {
+		this -> _First_Collection.Timing = _timing1_;
+		this -> _Second_Collection.Timing = _timing2_;
+	}
+	void update_Timings () {
+		this -> _First_Collection.Timing = millis ();
+		this -> _Second_Collection.Timing = millis ();
+	}
+	uint8_t lastResult () const							{ return this -> _lastResult; }
+	uint8_t operator () () {
+		Report_Collection_t _timing;
+
+		//if ( ( this -> _First_Collection.feature_Ptr_ == nullptr ) || ( this -> _Second_Collection.feature_Ptr_ == nullptr ) ) return _timing.Report;
+		if ( ( this -> _First_Collection.feature_Ptr_ == nullptr ) || ( this -> _Second_Collection.feature_Ptr_ == nullptr ) ) {
+			this -> _lastResult = _timing.Report;
+			return this -> _lastResult;
+		}
+		//if ( FEATURE_TESTING ( this -> _First_Collection ) && FEATURE_TESTING ( this -> _Second_Collection ) ) return _timing.Report;
+
+		//_timing.First_Report = ( millis () >= this -> _First_Collection.next_Timing () );
+		//_timing.Second_Report = ( millis () >= this -> _Second_Collection.next_Timing () );
+
+		if ( !FEATURE_TESTING ( this -> _First_Collection ) ) _timing.First_Report = ( millis () >= this -> _First_Collection.next_Timing () );
+		if ( !FEATURE_TESTING ( this -> _Second_Collection ) ) _timing.Second_Report = ( millis () >= this -> _Second_Collection.next_Timing () );
+		
+		if ( _timing.Report == Both_Collection ) {
+			this -> _First_Collection.set_NewTiming ();
+			this -> _Second_Collection.set_NewTiming ( 5 );
+			_timing.Report = First_Collection;
+		}
+		else if ( _timing.Report == First_Collection ) this -> _First_Collection.set_NewTiming ();
+		else if ( _timing.Report == Second_Collection ) this -> _Second_Collection.set_NewTiming ();
+
+		this -> _lastResult = _timing.Report;
+		return _lastResult;
+	}
+} scheduler_t;
+
+typedef struct {
+	#if ENABLED(SENSORS_DEVICE)
+		scheduler_t Sensors_Scheduler;
+	#endif
+	#if ENABLED(HIGHFLOW2_DEVICE)
+		scheduler_t HighFlow2_Scheduler;
+	#endif
+	#if ENABLED(SCREEN_DEVICE)
+		uint32_t _screen_timing;
+	#endif
+} manager_t;
+
+
+
 class CLASS_HID_ {
 private:
 	#if ENABLED(SENSORS_DEVICE)
 		HID_Device1_Input_Data_t sensors_interrupt_IN_;
 		HID_Device1_Features_Data_t sensors_features_;
-		uint32_t _sensors_temperature_timing;
-		uint32_t _sensors_monitor_timing;
+		//uint32_t _sensors_temperature_timing;
+		//uint32_t _sensors_monitor_timing;
 	#endif
 
 	#if ENABLED(HIGHFLOW2_DEVICE)
 		HID_Device2_Input_Data_t highflow2_interrupt_IN_;
 		HID_Device2_Features_Data_t highflow2_features_;
-		uint32_t _highflow2_temperature_timing;
-		uint32_t _highflow2_flow_timing;
+		//uint32_t _highflow2_temperature_timing;
+		//uint32_t _highflow2_flow_timing;
 	#endif
 
 	#if ENABLED(SCREEN_DEVICE)
 		HID_Device3_Input_Data_t screen_interrupt_IN_;
 		HID_Device3_Output_Data_t screen_interrupt_OUT_;
 		HID_Device3_Features_Data_t screen_features_;
-		uint32_t _screen_timing;
+		//uint32_t _screen_timing;
 	#endif
 
 	packed_t _report_Packed;
+	manager_t _manager;
 
 	void loop_InputReport ();
 	void loop_OutputReport ();

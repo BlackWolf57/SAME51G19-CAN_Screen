@@ -44,7 +44,7 @@ void Reset_Handler ( void ) {
 
 	//if ( ! bitRead ( RTC -> MODE2.GP [ 0 ].reg, 0 ) ) {
 		SystemInit ();
-		mdfyClocks ();												// -> ./board/clocks.h
+		mdfyClocks ();
 	//}
 
 	main ();
@@ -53,20 +53,20 @@ void Reset_Handler ( void ) {
 }
 
 void initBattery () {
-	if ( ( ! RSTC -> RCAUSE.bit.BACKUP ) && ( ! RSTC -> BKUPEXIT.bit.BBPS ) ) {					// Dans le cas ou l'on as pas un 'Backup Reset' et que cela ne provient pas du contrôleur de pile
-		SUPC -> BOD33.bit.ENABLE = 0;										// Désactivation du BOD33 pour re-programmation
+	if ( ( ! RSTC -> RCAUSE.bit.BACKUP ) && ( ! RSTC -> BKUPEXIT.bit.BBPS ) ) {
+		SUPC -> BOD33.bit.ENABLE = 0;
 		while ( ! SUPC -> STATUS.reg & SUPC_STATUS_B33SRDY );
 
-		SUPC -> BOD33.reg |= SUPC_BOD33_ACTION ( SUPC_BOD33_ACTION_BKUP ) |					// Le BOD33 place le microcontrôleur en mode veille sur batterie.
-				     //SUPC_BOD33_VBATLEVEL ( 28 ) |							// Niveau de batterie minimum.
-				     //SUPC_BOD33_RUNHIB |								// Configuration du BOD33 pour supporter le mode 'hibernation'
-				     SUPC_BOD33_RUNBKUP;								// Configuration du BOD33 pour supporter le mode 'backup'
+		SUPC -> BOD33.reg |= SUPC_BOD33_ACTION ( SUPC_BOD33_ACTION_BKUP ) |
+				     //SUPC_BOD33_VBATLEVEL ( 28 ) |
+				     //SUPC_BOD33_RUNHIB |
+				     SUPC_BOD33_RUNBKUP;
 	}
 
-	//SUPC -> VREG.reg |= SUPC_VREG_RUNBKUP;									// Le régulateur de tension principal n'est pas stoppé en mode 'backup'
-	SUPC -> BBPS.reg = SUPC_BBPS_WAKEEN;										// Réveil du microcontrôleur lors du passage du mode batterie au mode alimentée.
+	//SUPC -> VREG.reg |= SUPC_VREG_RUNBKUP;
+	SUPC -> BBPS.reg = SUPC_BBPS_WAKEEN;
 
-	SUPC -> BOD33.reg |= SUPC_BOD33_ENABLE;										// Fin de programmation, activation du BOD33 !
+	SUPC -> BOD33.reg |= SUPC_BOD33_ENABLE;
 	while ( ! SUPC -> STATUS.reg & SUPC_STATUS_B33SRDY );
 }
 
