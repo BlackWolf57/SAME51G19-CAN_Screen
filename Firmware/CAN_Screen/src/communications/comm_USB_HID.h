@@ -17,7 +17,8 @@
 #define SCREEN_DEVICE_NUMBER		(SCREEN_HID_INTERFACE_NUMBER - CDC_INTERFACE_COUNT)
 
 #define POWERSTATE_TESTING(Ptr)		(((Ptr) -> PowerState == SENSOR_POWER_STATE_UNDEFINED) || ((Ptr) -> PowerState == SENSOR_POWER_STATE_D4_POWER_OFF))
-#define FEATURE_TESTING(Col)		((POWERSTATE_TESTING(Col.feature_Ptr_)) || ((Col.feature_Ptr_) -> Status != SENSOR_STATE_READY))
+//#define FEATURE_TESTING(Col)		((POWERSTATE_TESTING(Col.feature_Ptr_) == false) && ((Col.feature_Ptr_) -> Status == SENSOR_STATE_READY))
+#define FEATURE_TESTING(Col)		(POWERSTATE_TESTING(Col.feature_Ptr_) == false)
 
 enum : uint8_t {
 	Free_Collection,
@@ -136,7 +137,7 @@ _Pragma("pack(1)")
 		typedef struct {
 			features_t temperatures_features_;					// Taille: 10 Bytes
 			struct {
-				features_t flow_features_;					// Taille: 11 Bytes
+				features_t flow_features_;					// Taille: 10 Bytes
 				uint8_t Name [ 32 ];						// Taille: 32 Bytes
 			} flow_struct_;								// Taille: 42 Bytes
 		} HID_Device2_Features_Data_t;							// Total:  52 Bytes !
@@ -188,25 +189,29 @@ typedef struct {
 	void update_Timings () {
 		this -> _First_Collection.Timing = millis ();
 		this -> _Second_Collection.Timing = millis ();
+		//SerialUSB.println ( "Scheduler: Update timings" );
 	}
 	uint8_t lastResult () const							{ return this -> _lastResult; }
 	uint8_t operator () () {
 		Report_Collection_t _timing;
 
-		//if ( ( this -> _First_Collection.feature_Ptr_ == nullptr ) || ( this -> _Second_Collection.feature_Ptr_ == nullptr ) ) return _timing.Report;
 		if ( ( this -> _First_Collection.feature_Ptr_ == nullptr ) || ( this -> _Second_Collection.feature_Ptr_ == nullptr ) ) {
+			//SerialUSB.println ( "Scheduler not initialized" );
 			this -> _lastResult = _timing.Report;
 			return this -> _lastResult;
 		}
-		//if ( FEATURE_TESTING ( this -> _First_Collection ) && FEATURE_TESTING ( this -> _Second_Collection ) ) return _timing.Report;
 
-		//_timing.First_Report = ( millis () >= this -> _First_Collection.next_Timing () );
-		//_timing.Second_Report = ( millis () >= this -> _Second_Collection.next_Timing () );
+		if ( FEATURE_TESTING ( this -> _First_Collection ) ) {
+			_timing.First_Report = ( millis () >= this -> _First_Collection.next_Timing () );
+			//SerialUSB.println ( "Scheduler: FEATURE_TESTING = First Collection" );
+		}
+		if ( FEATURE_TESTING ( this -> _Second_Collection ) ) {
+			_timing.Second_Report = ( millis () >= this -> _Second_Collection.next_Timing () );
+			//SerialUSB.println ( "Scheduler: FEATURE_TESTING = Second Collection" );
+		}
 
-		if ( !FEATURE_TESTING ( this -> _First_Collection ) ) _timing.First_Report = ( millis () >= this -> _First_Collection.next_Timing () );
-		if ( !FEATURE_TESTING ( this -> _Second_Collection ) ) _timing.Second_Report = ( millis () >= this -> _Second_Collection.next_Timing () );
-		
 		if ( _timing.Report == Both_Collection ) {
+			//SerialUSB.println ( "Scheduler: FEATURE_TESTING = Both Collection. Arbiting !" );
 			this -> _First_Collection.set_NewTiming ();
 			this -> _Second_Collection.set_NewTiming ( 5 );
 			_timing.Report = First_Collection;
@@ -238,22 +243,17 @@ private:
 	#if ENABLED(SENSORS_DEVICE)
 		HID_Device1_Input_Data_t sensors_interrupt_IN_;
 		HID_Device1_Features_Data_t sensors_features_;
-		//uint32_t _sensors_temperature_timing;
-		//uint32_t _sensors_monitor_timing;
 	#endif
 
 	#if ENABLED(HIGHFLOW2_DEVICE)
 		HID_Device2_Input_Data_t highflow2_interrupt_IN_;
 		HID_Device2_Features_Data_t highflow2_features_;
-		//uint32_t _highflow2_temperature_timing;
-		//uint32_t _highflow2_flow_timing;
 	#endif
 
 	#if ENABLED(SCREEN_DEVICE)
 		HID_Device3_Input_Data_t screen_interrupt_IN_;
 		HID_Device3_Output_Data_t screen_interrupt_OUT_;
 		HID_Device3_Features_Data_t screen_features_;
-		//uint32_t _screen_timing;
 	#endif
 
 	packed_t _report_Packed;

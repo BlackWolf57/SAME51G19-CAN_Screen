@@ -86,8 +86,8 @@ static const uint8_t _Device1_HIDReportDescriptor [] PROGMEM = {
 			HID_LOGICAL_MAX32 ( 0x7FFFFFFF ),
 			HID_REPORT_SIZE ( 32 ),
 			HID_REPORT_COUNT ( 1 ),
-			//HID_SENSOR_UNIT_MILLISECOND,
-			//HID_UNIT_EXPONENT ( SENSOR_EXPONENT_0 ),
+			HID_SENSOR_UNIT_MILLISECOND,
+			HID_UNIT_EXPONENT ( SENSOR_EXPONENT_0 ),
 			HID_FEATURE ( DV_ABS ),
 
 			HID_SENSOR_PROPERTY_CHANGE_SENSIVITY_ABSOLUTE,				// Windows hardware drivers HID -> Sensor HID class driver: Feature must contain change sensivity setting
@@ -495,7 +495,7 @@ static const uint8_t _Device3_HIDReportDescriptor [] PROGMEM = {
 		HID_USAGEPAGE_SENSORS_PAGE,
 		HID_SENSOR_TIME,
 		HID_LOGICAL_MIN8 ( 0x00 ),
-		HID_LOGICAL_MAX32 ( 0xFFFFFFFF ),
+		HID_LOGICAL_MAX32 ( 0x7FFFFFFF ),
 		HID_REPORT_SIZE ( 32 ),
 		HID_REPORT_COUNT ( 2 ),
 
@@ -567,11 +567,11 @@ static const uint8_t _Device3_HIDReportDescriptor [] PROGMEM = {
 		HID_COLLECTION ( HID_COLLECTION_PHYSICAL ),
 			HID_USAGEPAGE_GENERIC_DESKTOP_PAGE,
 
-			HID_GENERIC_RPM,
-			HID_GENERIC_RPM,
-			HID_GENERIC_RPM,
-			HID_GENERIC_RPM,
-			HID_GENERIC_RPM,
+			HID_GENERIC_RPM,							//		Vitesse moyenne des pompes
+			HID_GENERIC_RPM,							//		Vitesse du ventilateur arrière
+			HID_GENERIC_RPM,							//		Vitesse moyenne des ventilateurs supérieurs
+			HID_GENERIC_RPM,							//		Vitesse du ventilateur frontal
+			HID_GENERIC_RPM,							//		Vitesse moyenne des ventilateurs de la zone HDD
 			HID_LOGICAL_MIN16 ( 0xFFFF ),
 			HID_LOGICAL_MAX16 ( 0x7FFF ),
 			HID_REPORT_SIZE ( 16 ),

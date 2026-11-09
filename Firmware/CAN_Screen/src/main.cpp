@@ -55,7 +55,7 @@ void Reset_Handler ( void ) {
 void initBattery () {
 	if ( ( ! RSTC -> RCAUSE.bit.BACKUP ) && ( ! RSTC -> BKUPEXIT.bit.BBPS ) ) {
 		SUPC -> BOD33.bit.ENABLE = 0;
-		while ( ! SUPC -> STATUS.reg & SUPC_STATUS_B33SRDY );
+		while ( SUPC -> STATUS.bit.B33SRDY == false );
 
 		SUPC -> BOD33.reg |= SUPC_BOD33_ACTION ( SUPC_BOD33_ACTION_BKUP ) |
 				     //SUPC_BOD33_VBATLEVEL ( 28 ) |
@@ -63,11 +63,11 @@ void initBattery () {
 				     SUPC_BOD33_RUNBKUP;
 	}
 
-	//SUPC -> VREG.reg |= SUPC_VREG_RUNBKUP;
-	SUPC -> BBPS.reg = SUPC_BBPS_WAKEEN;
+	//SUPC -> VREG.bit.RUNBKUP = 1;
+	SUPC -> BBPS.bit.WAKEEN = 1;
 
-	SUPC -> BOD33.reg |= SUPC_BOD33_ENABLE;
-	while ( ! SUPC -> STATUS.reg & SUPC_STATUS_B33SRDY );
+	SUPC -> BOD33.bit.ENABLE = 1;
+	while ( SUPC -> STATUS.bit.B33SRDY == false );
 }
 
 void print_RCause () {
@@ -138,7 +138,7 @@ int main ( void ) {
 		screen_.loop ();
 		hid_.loop ();
 
-		if ( ( ( time_.seconds < 5 ) && ( _now == 0 ) ) || ( time_.seconds > ( _now + 5 ) ) ) {
+		/*if ( ( ( time_.seconds < 5 ) && ( _now == 0 ) ) || ( time_.seconds > ( _now + 5 ) ) ) {
 			SerialUSB.println ( "Températures:" );
 			SerialUSB.print ( " - µC = " );
 			SerialUSB.print ( temperatures_.Chip (), 2 );
@@ -203,7 +203,7 @@ int main ( void ) {
 			SerialUSB.println ( "" );
 
 			_now = time_.seconds;
-		}
+		}*/
 	}
 
 	return 0;

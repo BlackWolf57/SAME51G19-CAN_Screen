@@ -14,7 +14,6 @@ CLASS_HID_::CLASS_HID_ () {
 		this -> sensors_features_.temperatures_features_.Status = SENSOR_STATE_INITIALIZING;
 		this -> sensors_features_.temperatures_features_.Interval = 1000;			// Intervalle entre deux reports ( en millisecondes )
 		this -> sensors_features_.temperatures_features_.Sensivity = 10;
-		//this -> _sensors_temperature_timing = 0;
 
 		this -> sensors_features_.voltages_features_.Connection = SENSOR_CONNECTION_TYPE_PC_EXTERNAL;
 		this -> sensors_features_.voltages_features_.PowerState = SENSOR_POWER_STATE_D4_POWER_OFF;
@@ -22,7 +21,6 @@ CLASS_HID_::CLASS_HID_ () {
 		this -> sensors_features_.voltages_features_.Status = SENSOR_STATE_INITIALIZING;
 		this -> sensors_features_.voltages_features_.Interval = 1000;
 		this -> sensors_features_.voltages_features_.Sensivity = 10;
-		//this -> _sensors_monitor_timing = 0;
 
 		memset ( &this -> sensors_interrupt_IN_, 0, sizeof ( this -> sensors_interrupt_IN_ ) );
 		this -> _manager.Sensors_Scheduler.set_Timings ( 0, 0 );
@@ -38,7 +36,6 @@ CLASS_HID_::CLASS_HID_ () {
 		this -> highflow2_features_.temperatures_features_.Status = SENSOR_STATE_INITIALIZING;
 		this -> highflow2_features_.temperatures_features_.Interval = 1000;
 		this -> highflow2_features_.temperatures_features_.Sensivity = 10;
-		//this -> _highflow2_temperature_timing = 0;
 
 		this -> highflow2_features_.flow_struct_.flow_features_.Connection = SENSOR_CONNECTION_TYPE_PC_EXTERNAL;
 		this -> highflow2_features_.flow_struct_.flow_features_.PowerState = SENSOR_POWER_STATE_D4_POWER_OFF;
@@ -47,7 +44,6 @@ CLASS_HID_::CLASS_HID_ () {
 		this -> highflow2_features_.flow_struct_.flow_features_.Interval = 1000;
 		this -> highflow2_features_.flow_struct_.flow_features_.Sensivity = 10;
 		memcpy ( &this -> highflow2_features_.flow_struct_.Name, CAN_SCREEN_HIGHFLOW2_FLOW_UTF16, sizeof ( CAN_SCREEN_HIGHFLOW2_FLOW_UTF16 ) );
-		//this -> _highflow2_flow_timing = 0;
 
 		memset ( &this -> highflow2_interrupt_IN_, 0, sizeof ( this -> highflow2_interrupt_IN_ ) );
 		this -> _manager.HighFlow2_Scheduler.set_Timings ( 0, 0 );
@@ -80,15 +76,19 @@ void CLASS_HID_::loop_InputReport () {
 		#if ENABLED(SENSORS_DEVICE)
 			uint8_t _sensors_CollectionToTransmit = this -> _manager.Sensors_Scheduler ();
 			if ( _sensors_CollectionToTransmit == First_Collection ) {
+				SerialUSB.println ( "Testing First Collection..." );
 				if ( this -> _report_Packed.Sensors_TemperatureDevice ) {
+					SerialUSB.println ( "First Collection report packed !" );
 					if ( customHID_ ().isReadyToTransmit ( SENSORS_HID_ENDPOINT_NUMBER ) ) {
+						SerialUSB.println ( "Sending First Collection report !" );
 						customHID_ ().sendReport ( Sensors_TemperatureReport_ID, &this -> sensors_interrupt_IN_.Temperatures, sizeof ( this -> sensors_interrupt_IN_.Temperatures ), SENSORS_DEVICE_NUMBER );
 						this -> _report_Packed.Sensors_TemperatureDevice = false;
 					}
 				}
 			}
 			else {
-				if ( this -> _report_Packed.Sensors_TemperatureDevice == false ) {
+				if ( ( this -> _report_Packed.Sensors_TemperatureDevice == false ) && ( POWERSTATE_TESTING ( &this -> sensors_features_.temperatures_features_ ) == false ) )  {
+					SerialUSB.println ( "Packing Sensors Device Temperature Collection" );
 					temperatures_t _tmpData;
 					temperatures_.get ( &_tmpData );
 
@@ -99,8 +99,11 @@ void CLASS_HID_::loop_InputReport () {
 			}
 
 			if ( _sensors_CollectionToTransmit == Second_Collection ) {
+				//SerialUSB.println ( "Testing Second Collection..." );
 				if ( this -> _report_Packed.Sensors_MonitorDevice ) {
+					//SerialUSB.println ( "Second Collection report packed !" );
 					if ( customHID_ ().isReadyToTransmit ( SENSORS_HID_ENDPOINT_NUMBER ) ) {
+						//SerialUSB.println ( "Sending Second Collection report !" );
 						customHID_ ().sendReport ( Sensors_MonitorReport_ID, &this -> sensors_interrupt_IN_.voltages_, sizeof ( this -> sensors_interrupt_IN_.voltages_ ), SENSORS_DEVICE_NUMBER );
 						this -> _report_Packed.Sensors_MonitorDevice = false;
 					}
@@ -108,6 +111,7 @@ void CLASS_HID_::loop_InputReport () {
 			}
 			else {
 				if ( this -> _report_Packed.Sensors_MonitorDevice == false ) {
+					//SerialUSB.println ( "Packing Sensors Device Voltage Collection" );
 					monitor_.get ( &this -> sensors_interrupt_IN_.voltages_ );
 					this -> _report_Packed.Sensors_MonitorDevice = true;
 				}
@@ -202,12 +206,18 @@ void CLASS_HID_::loop_SetReport () {
 					switch ( _ID ) {
 						case TemperatureFeature_ID:
 						case Sensors_TemperatureReport_ID:
+							//SerialUSB.print ( "loop_SetReport: Lecture de: " );
+							//lazy_print ( _tmpData, sizeof ( _tmpData ) );
 							memcpy ( &this -> sensors_features_.temperatures_features_, _tmpData, sizeof ( this -> sensors_features_.temperatures_features_ ) );
+							//SerialUSB.print ( "loop_SetReport: Copie de: " );
+							//lazy_print ( &this -> sensors_features_.temperatures_features_, sizeof ( this -> sensors_features_.temperatures_features_ ) );
+							if ( ( ( this -> sensors_features_.temperatures_features_.Interval >> 24 ) & 0xFF ) == 0x5F ) this -> sensors_features_.temperatures_features_.Interval &= 0xFFFFFF;
 							this -> _manager.Sensors_Scheduler.update_Timings ();
 							break;
 						case MonitorFeature_ID:
 						case Sensors_MonitorReport_ID:
 							memcpy ( &this -> sensors_features_.voltages_features_, _tmpData, sizeof ( this -> sensors_features_.voltages_features_ ) );
+							if ( ( ( this -> sensors_features_.voltages_features_.Interval >> 24 ) & 0xFF ) == 0x5F ) this -> sensors_features_.voltages_features_.Interval &= 0xFFFFFF;
 							this -> _manager.Sensors_Scheduler.update_Timings ();
 							break;
 					}
@@ -228,10 +238,12 @@ void CLASS_HID_::loop_SetReport () {
 					switch ( _ID ) {
 						case HighFlow2_TemperatureReport_ID:
 							memcpy ( &this -> highflow2_features_.temperatures_features_, _tmpData, sizeof ( this -> highflow2_features_.temperatures_features_ ) );
+							if ( ( ( this -> highflow2_features_.temperatures_features_.Interval >> 24 ) & 0xFF ) == 0x5F ) this -> highflow2_features_.temperatures_features_.Interval &= 0xFFFFFF;
 							this -> _manager.HighFlow2_Scheduler.update_Timings ();
 							break;
 						case HighFlow2_FlowReport_ID:
-							memcpy ( &this -> highflow2_features_.flow_struct_, _tmpData, sizeof ( this -> highflow2_features_.flow_struct_ ) );
+							memcpy ( &this -> highflow2_features_.flow_struct_.flow_features_, _tmpData, sizeof ( this -> highflow2_features_.flow_struct_.flow_features_ ) );
+							if ( ( ( this -> highflow2_features_.flow_struct_.flow_features_.Interval >> 24 ) & 0xFF ) == 0x5F ) this -> highflow2_features_.flow_struct_.flow_features_.Interval &= 0xFFFFFF;
 							this -> _manager.HighFlow2_Scheduler.update_Timings ();
 							break;
 					}

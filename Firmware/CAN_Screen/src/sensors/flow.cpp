@@ -53,7 +53,7 @@ uint8_t CLASS_FLOW_::begin () {
 	EIC -> CTRLA.reg |= EIC_CTRLA_ENABLE;
 	while ( EIC -> SYNCBUSY.bit.ENABLE );
 
-	TC0 -> COUNT32.CTRLA.reg = TC_CTRLA_CAPTEN0 |									// Activation de la capture dans CC1
+	TC0 -> COUNT32.CTRLA.reg = TC_CTRLA_CAPTEN0 |									// Activation de la capture dans CC0
 				   TC_CTRLA_PRESCSYNC ( TC_CTRLA_PRESCSYNC_GCLK ) |					// Aucun prescaler
 				   TC_CTRLA_MODE ( TC_CTRLA_MODE_COUNT32 );						// Compteur en mode 32 bits
 
@@ -64,7 +64,8 @@ uint8_t CLASS_FLOW_::begin () {
 	TC0 -> COUNT32.CC [ 1 ].reg = 35000000;										// TOP value ?
 	while ( TC0 -> COUNT32.SYNCBUSY.bit.CC1 );
 
-	TC0 -> COUNT32.INTENSET.reg = TC_INTENSET_MC0;									// Interruption déclenchée par MC1 ( Valeur de TimeStamp )
+	TC0 -> COUNT32.INTENSET.reg = TC_INTENSET_MC0 |									// Interruption déclenchée par MC0 ( Valeur de TimeStamp )
+				      TC_INTENSET_MC1;									// Interruption déclenchée par MC1 ( TimeOut )
 	NVIC_SetPriority ( TC0_IRQn, 0 );
 	NVIC_EnableIRQ ( TC0_IRQn );
 
@@ -76,4 +77,15 @@ uint8_t CLASS_FLOW_::begin () {
 
 CLASS_FLOW_ debimetre_;
 
-void TC0_Handler ()							{ if ( TC0 -> COUNT32.INTFLAG.bit.MC0 ) debimetre_.set (); }
+void TC0_Handler () {
+	if ( TC0 -> COUNT32.INTFLAG.bit.MC0 ) {
+		debimetre_.set ();
+		TC0 -> COUNT32.COUNT.reg = 0;
+		while ( TC0 -> COUNT32.SYNCBUSY.bit.COUNT );
+	}
+
+	if ( TC0 -> COUNT32.INTFLAG.bit.MC1 ) {
+		debimetre_.setDisconnected ();
+		TC0 -> COUNT32.INTFLAG.bit.MC1 = 1;
+	}
+}

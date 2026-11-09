@@ -32,7 +32,7 @@ typedef struct {
 
 	state_t State;							// Etat pour savoir si tensions encore à zéro ou non.
 	uint8_t Padding;
-	uint16_t monitor_VCORE;						// Tension de coeur.			Environ 1200 mV
+	uint16_t monitor_VCORE;						// Tension de cœur.			Environ 1200 mV
 	uint16_t monitor_VBatt;						// Tension de la pile RTC.		Environ 3000 mV
 	uint16_t monitor_IOVCC;						// Tension des broches I/O.		Environ 3300 mV ( VLogic )
 	uint16_t monitor_VRef;						// Tension de référence.

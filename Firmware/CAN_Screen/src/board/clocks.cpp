@@ -96,6 +96,7 @@
 
 void mdfyClocks () {
 	OSC32KCTRL -> OSCULP32K.reg |= OSC32KCTRL_OSCULP32K_EN1K | OSC32KCTRL_OSCULP32K_EN32K;				// Configuration de l'oscillateur interne de 32,768kHz
+	//while ( !OSC32KCTRL -> STATUS.bit.XOSC32KSW );
 
 	// Configuration de XOSC0
 	OSCCTRL -> XOSCCTRL [ 0 ].reg = OSCCTRL_XOSCCTRL_STARTUP ( 0x4 ) |
@@ -104,7 +105,8 @@ void mdfyClocks () {
 					OSCCTRL_XOSCCTRL_ONDEMAND |
 					OSCCTRL_XOSCCTRL_XTALEN |
 					OSCCTRL_XOSCCTRL_ENABLE;
-	while ( OSCCTRL -> STATUS.reg & OSCCTRL_STATUS_XOSCRDY0 );
+	//while ( OSCCTRL -> STATUS.reg & OSCCTRL_STATUS_XOSCRDY0 );
+	while ( OSCCTRL -> STATUS.bit.XOSCRDY0 );
 
 	// Utilisation de l'oscillateur externe à 24 MHz comme source pour "Generic Clock Generator 6" ( 24 MHz )
 	GCLK -> GENCTRL [ GENERIC_CLOCK_GENERATOR_24M ].reg = GCLK_GENCTRL_SRC ( GCLK_GENCTRL_SRC_XOSC0 ) |

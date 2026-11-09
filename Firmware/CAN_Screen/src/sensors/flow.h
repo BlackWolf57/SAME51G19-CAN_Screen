@@ -18,7 +18,8 @@ typedef struct {
 	int16_t Flow;
 	int16_t Speed () const						{ return ( this -> Flow == FLOW_DISCONNECTED ? FLOW_DISCONNECTED : ( ( this -> Flow * PULSE_PER_LITER ) / ( 60 * PULSE_PER_TRS ) ) ); }
 
-	void Counter ( uint32_t _TC_Value_ )				{ this -> Flow = ( ( ( _TC_Value_ >= 0x1AA0 ) && ( _TC_Value_ <= 0x2081018 ) ) ? ( 3600 / ( _TC_Value_ * PULSE_PER_LITER * ( 1 / TIMER_FREQ ) ) ) : FLOW_DISCONNECTED ); }
+	//void Counter ( uint32_t _TC_Value_ )				{ this -> Flow = ( ( ( _TC_Value_ >= 0x1AA0 ) && ( _TC_Value_ <= 0x2081018 ) ) ? ( 3600 / ( _TC_Value_ * PULSE_PER_LITER * ( 1 / TIMER_FREQ ) ) ) : FLOW_DISCONNECTED ); }
+	void Counter ( uint32_t _TC_Value_ )				{ this -> Flow = ( ( ( _TC_Value_ >= 0x1AA0 ) && ( _TC_Value_ <= 0x2081018 ) ) ? ( ( 3600ULL * TIMER_FREQ ) / ( _TC_Value_ * PULSE_PER_LITER ) ) : FLOW_DISCONNECTED ); }
 } high_flow_t;								// sizeof () = 2
 
 class CLASS_FLOW_ {
@@ -30,6 +31,7 @@ public:
 	int16_t Speed () const						{ return this -> high_flow_.Speed (); }
 	void get ( high_flow_t *_buffer_ )				{ memcpy ( _buffer_, &this -> high_flow_, sizeof ( this -> high_flow_ ) ); }
 	void set ()							{ this -> high_flow_.Counter ( TC0 -> COUNT32.CC [ 0 ].reg ); }
+	void setDisconnected ()						{ this -> high_flow_.Flow = FLOW_DISCONNECTED; }
 	uint8_t begin ();
 	void sleep ();		//TODO - Stopper le compteur en mode veille
 	void wakeup ();		//TODO - Redémarrer le compteur au réveil

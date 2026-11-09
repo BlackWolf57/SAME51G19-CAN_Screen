@@ -2,6 +2,7 @@
 #include "./HID_Strings.h"
 #include "../../configuration.h"
 #include "USB/USBCore.cpp"
+#include "../board/utils.h"
 
 extern USBDevice_ usbd;
 
@@ -312,7 +313,7 @@ extern USBDevice_ usbd;
 					return -1;
 			}
 
-			static uint8_t _data [ EPX_SIZE ];
+			uint8_t _data [ EPX_SIZE ];
 			memset ( _data, 0, sizeof ( _data ) );
 			uint32_t _length;
 			if ( _index == no_feature_ID ) {				// Cas des FEATURES sans ID !
@@ -327,6 +328,10 @@ extern USBDevice_ usbd;
 				_data [ 0 ] = this -> featureReport_ [ _index ].ID;
 				memcpy ( &_data [ 1 ], this -> featureReport_ [ _index ].Report_Ptr, _length );
 				_length += 1;
+				/*if ( _data [ 0 ] == 5 ) {
+					SerialUSB.print ( "sendCtrlReport: Envoi de: " );
+					lazy_print ( ( uint8_t* ) _data, sizeof ( _data ) );
+				}*/
 			}
 
 			_length = min ( _length, ( uint32_t ) setup_.wLength );
@@ -379,6 +384,8 @@ extern USBDevice_ usbd;
 
 	uint8_t CLASS_CUSTOM_HID_::getReport ( uint8_t* _reportType_, uint8_t* _interface_, void* _buffer_ ) {
 		if ( ( this -> setReport_.Ready ) && ( this -> setReport_.Length > 2 ) ) {
+			if ( this -> setReport_.Report [ 0 ] == 0x00 ) return 0;
+
 			memcpy ( _buffer_, this -> setReport_.Report, this -> setReport_.Length );
 			*_reportType_ = ( uint8_t ) this -> setReport_.Type;
 			*_interface_ = ( uint8_t ) this -> setReport_.Interface;
@@ -391,14 +398,24 @@ extern USBDevice_ usbd;
 
 	uint8_t CLASS_CUSTOM_HID_::getReport ( uint8_t* _reportType_, uint8_t* _reportID_, uint8_t* _interface_, void* _buffer_ ) {
 		if ( ( this -> setReport_.Ready ) && ( this -> setReport_.Length > 2 ) ) {
-			this -> setReport_.Length --;
-			memcpy ( _buffer_, &this -> setReport_.Report [ 1 ], this -> setReport_.Length );
+			/*if ( this -> setReport_.ID == 5 ) {
+				SerialUSB.print ( "getReport: Mise en cache de: " );
+				lazy_print ( ( uint8_t* ) this -> setReport_.Report, this -> setReport_.Length );
+			}*/
+
+			if ( this -> setReport_.Report [ 0 ] == 0x00 ) return 0;
+
+			uint8_t _length = this -> setReport_.Length - 1;
+			memcpy ( _buffer_, &this -> setReport_.Report [ 1 ], _length );
+			uint8_t* _verif = ( uint8_t* ) _buffer_;
+			if ( _length > 7 && _verif [ 7 ] == 0x5F ) SerialUSB.println ( "Pollution 0x5F (95ms IIO) détectée sur Interval." );
 			*_reportType_ = ( uint8_t ) this -> setReport_.Type;
 			*_reportID_ = ( uint8_t ) this -> setReport_.ID;
 			*_interface_ = ( uint8_t ) this -> setReport_.Interface;
 
-			this -> setReport_.Ready = false;
-			return this -> setReport_.Length;
+			//this -> setReport_.Ready = false;
+			memset ( &this -> setReport_, 0, sizeof ( this -> setReport_ ) );
+			return _length;
 		}
 		else return 0;
 	}
