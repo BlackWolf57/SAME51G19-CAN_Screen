@@ -21,6 +21,7 @@ _autosave-*
 fp-info-cache
 ~*.lck
 \#auto_saved_files#
+Schematics/Carte écran/PCB_Screen_interface_v2/Firmware
 
 # Netlist files (exported from Eeschema)
 *.net
