@@ -11,5 +11,9 @@
 		{	"directory": "./python",
 			"filters": [ "*.py" ],
 			"recursive": 1
-		} ]
+		},
+		{	"directory": "./Driver",
+			"filters": [ "*.c", "*.conf", "Makefile" ],
+			"recursive": 1
+		}]
 }
