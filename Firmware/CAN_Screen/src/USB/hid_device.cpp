@@ -143,7 +143,28 @@ extern USBDevice_ usbd;
 							this -> setReport_.Interface = setup_.wIndex;
 							this -> setReport_.Type = setup_.wValueH;
 							this -> setReport_.ID = setup_.wValueL;
-							this -> setReport_.Length = setup_.wLength > EP0_SIZE ? EP0_SIZE : setup_.wLength;
+							//this -> setReport_.Length = setup_.wLength > EP0_SIZE ? EP0_SIZE : setup_.wLength;
+							if ( setup_.wValueH == HID_FEATURE_REPORT_TYPE ) {
+								uint8_t _index;
+								switch ( setup_.wValueL ) {
+									case Sensors_TemperatureReport_ID:
+										_index = feature_SensorsTemperature;
+										break;
+									case Sensors_MonitorReport_ID:
+										_index = feature_SensorsMonitor;
+										break;
+									case HighFlow2_TemperatureReport_ID:
+										_index = feature_HighFlow2Temperature;
+										break;
+									case HighFlow2_FlowReport_ID:
+										_index = feature_HighFlow2Flow;
+										break;
+									default:
+										return true;
+								}
+								this -> setReport_.Length = this -> featureReport_ [ _index ].Length + 1;
+							}
+							else this -> setReport_.Length = setup_.wLength > EP0_SIZE ? EP0_SIZE : setup_.wLength;
 
 							USBDevice.recvControl ( this -> setReport_.Report, this -> setReport_.Length );
 							this -> setReport_.Ready = true;
@@ -202,6 +223,12 @@ extern USBDevice_ usbd;
 		return 13;
 	}
 
+	/** @brief				Réception d'un INTERRUPT OUT
+	 *  @details
+	 *  @param _data_
+	 *  @param _dataLength_
+	 *  @param _length_
+	 */
 	int CLASS_CUSTOM_HID_::RecvControl ( uint8_t *_data_, uint16_t _dataLength_, uint32_t _length_ ) {
 		uint8_t _size = EP0_SIZE;
 		uint8_t _dataSize = EP0_SIZE;
@@ -253,6 +280,13 @@ extern USBDevice_ usbd;
 		this -> set_DescriptorSize ( node_ -> device, node_ -> length );
 	}
 
+	/** @brief				Enregistre une feature dans un tableau
+	 *  @details
+	 *  @param _featureNB_			Position dans le tableau des features
+	 *  @param _featurePtr_			Pointeur vers la structure de feature
+	 *  @param _featureLength_		Nombre d'octets de la structure
+	 *  @param _featureID_			Numéro d'ID sur le bus HID
+	 */
 	void CLASS_CUSTOM_HID_::AppendFeature ( uint8_t _featureNB_, void* _featurePtr_, uint32_t _featureLength_, uint8_t _featureID_ ) {
 		HID_Feature_t _feature;
 
@@ -262,6 +296,10 @@ extern USBDevice_ usbd;
 		memcpy ( &this -> featureReport_ [ _featureNB_ ], &_feature, sizeof ( _feature ) );
 	}
 
+	/** @brief				Réponse à une requête GET REPORT
+	 *  @details
+	 *  @param setup_			Les paramètres envoyées sur le bus HID
+	 */
 	int CLASS_CUSTOM_HID_::sendCtrlReport ( USBSetup& setup_ ) {
 		if ( this -> is_Plugged () == false ) return -1;
 
@@ -277,14 +315,12 @@ extern USBDevice_ usbd;
 		if ( setup_.wValueH == HID_FEATURE_REPORT_TYPE ) {
 			uint8_t _index;
 			switch ( setup_.wValueL ) {
-				case 0:
+				case No_FeatureReport_ID:
 					_index = no_feature_ID;
 					break;
-				case TemperatureFeature_ID:
 				case Sensors_TemperatureReport_ID:
 					_index = feature_SensorsTemperature;
 					break;
-				case MonitorFeature_ID:
 				case Sensors_MonitorReport_ID:
 					_index = feature_SensorsMonitor;
 					break;
@@ -342,6 +378,12 @@ extern USBDevice_ usbd;
 		return -1;
 	}
 
+	/** @brief				Envoi d'un INTERRUPT IN sans ID
+	 *  @details
+	 *  @param _data_			Les données
+	 *  @param _length_			Le nombre d'octets occupés par les données
+	 *  @param _device_			Le numéro d'interface qui vas envoyer les données
+	 */
 	int CLASS_CUSTOM_HID_::sendReport ( const void* _data_, uint32_t _length_, uint8_t _device_ ) {
 		if ( this -> is_Plugged () == false ) return -1;
 
@@ -360,6 +402,13 @@ extern USBDevice_ usbd;
 		return _length_;
 	}
 
+	/** @brief				Envoi d'un INTERRUPT IN avec ID
+	 *  @details
+	 *  @param _reportID_			Le numéro d'ID à ajouter aux données
+	 *  @param _data_			Les données
+	 *  @param _length_			Le nombre d'octets occupés par les données
+	 *  @param _device_			Le numéro d'interface qui vas envoyer les données
+	 */
 	int CLASS_CUSTOM_HID_::sendReport ( uint8_t _reportID_, const void* _data_, int _length_, uint8_t _device_ ) {
 		if ( this -> is_Plugged () == false ) return -1;
 		if ( _length_ > ( EPX_SIZE - 1 ) ) return -1;
@@ -382,6 +431,12 @@ extern USBDevice_ usbd;
 		return _length_;
 	}
 
+	/** @brief				Réception d'une requête
+	 *  @details				Utilisé pour les requêtes de type SET FEATURE
+	 *  @param _reportType_			Pointeur pour copier le type de requête ( INTERRUPT IN, INTERRUPT OUT, SET_FEATURE )
+	 *  @param _interface_			Pointeur pour copier le numéro d'interface qui as reçu la requête
+	 *  @param _buffer_			Pointeur ou copier les données
+	 */
 	uint8_t CLASS_CUSTOM_HID_::getReport ( uint8_t* _reportType_, uint8_t* _interface_, void* _buffer_ ) {
 		if ( ( this -> setReport_.Ready ) && ( this -> setReport_.Length > 2 ) ) {
 			if ( this -> setReport_.Report [ 0 ] == 0x00 ) return 0;
@@ -396,6 +451,13 @@ extern USBDevice_ usbd;
 		else return 0;
 	}
 
+	/** @brief				Réception d'une requête
+	 *  @details				Utilisé pour les requêtes de type SET FEATURE
+	 *  @param _reportType_			Pointeur pour copier le type de requête ( INTERRUPT IN, INTERRUPT OUT, SET FEATURE )
+	 *  @param _reportID_			Pointeur pour copier le numéro d'ID
+	 *  @param _interface_			Pointeur pour copier le numéro d'interface qui as reçu la requête
+	 *  @param _buffer_			Pointeur ou copier les données
+	 */
 	uint8_t CLASS_CUSTOM_HID_::getReport ( uint8_t* _reportType_, uint8_t* _reportID_, uint8_t* _interface_, void* _buffer_ ) {
 		if ( ( this -> setReport_.Ready ) && ( this -> setReport_.Length > 2 ) ) {
 			/*if ( this -> setReport_.ID == 5 ) {
@@ -403,12 +465,16 @@ extern USBDevice_ usbd;
 				lazy_print ( ( uint8_t* ) this -> setReport_.Report, this -> setReport_.Length );
 			}*/
 
-			if ( this -> setReport_.Report [ 0 ] == 0x00 ) return 0;
+			//if ( this -> setReport_.Report [ 0 ] == 0x00 ) return 0;
 
 			uint8_t _length = this -> setReport_.Length - 1;
 			memcpy ( _buffer_, &this -> setReport_.Report [ 1 ], _length );
 			uint8_t* _verif = ( uint8_t* ) _buffer_;
-			if ( _length > 7 && _verif [ 7 ] == 0x5F ) SerialUSB.println ( "Pollution 0x5F (95ms IIO) détectée sur Interval." );
+			//if ( _length > 7 && _verif [ 7 ] == 0x5F ) SerialUSB.println ( "Pollution 0x5F (95ms IIO) détectée sur Interval." );
+			if ( _length > 7 ) {
+				SerialUSB.print ( _verif [ 7 ] < 0x10 ? "0x0" : "0x" );
+				SerialUSB.println ( _verif [ 7 ], HEX );
+			}
 			*_reportType_ = ( uint8_t ) this -> setReport_.Type;
 			*_reportID_ = ( uint8_t ) this -> setReport_.ID;
 			*_interface_ = ( uint8_t ) this -> setReport_.Interface;

@@ -10,7 +10,7 @@
 	#define EP0_SIZE					64
 	#define SENSORS_DEVICE
 	#define HIGHFLOW2_DEVICE
-	//#define SCREEN_DEVICE
+	#define SCREEN_DEVICE
 
 	#if ENABLED(SENSORS_DEVICE)																// CDC		Sensors Device			High-Flow 2 Device		Screen Device
 		#define SENSORS_HID_INTERFACE_COUNT		1												// Non		Interface n° 0, Endpoint n° 1 (In)

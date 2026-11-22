@@ -89,7 +89,7 @@ _Pragma("pack(1)")
 	typedef struct {
 		uint8_t Connection;								// Taille:  1 Byte
 		uint8_t PowerState;								// Taille:  1 Byte
-		uint8_t State;									// Taille:  1 Byte
+		uint8_t Event;									// Taille:  1 Byte
 		uint8_t Status;									// Taille:  1 Byte
 		uint32_t Interval;								// Taille:  4 Bytes
 		uint16_t Sensivity;								// Taille:  2 Bytes
@@ -111,15 +111,27 @@ _Pragma("pack(1)")
 	/* Device 1 - Sensor device !								*/
 	#if ENABLED(SENSORS_DEVICE)
 		typedef struct {
+			uint8_t Event;								// Taille:  1 Byte
+			uint8_t Status;								// Taille:  1 Byte
 			union {
 				struct {
 					int16_t Chip;						// Taille: *2 Bytes
 					int16_t Box;						// Taille: *2 Bytes
 				};								// Taille: *4 Bytes
 				int16_t Temperatures [ 2 ];					// Taille: *4 Bytes
-			};									// Taille:  4 Bytes
+			};
+		} HID_Device1_Collection1_Input_Data_t;						// Total:   6 Bytes
+
+		typedef struct {
+			uint8_t Event;								// Taille:  1 Byte
+			uint8_t Status;								// Taille:  1 Byte
 			voltage_t voltages_;							// Taille: 16 Bytes
-		} HID_Device1_Input_Data_t;							// Total:  20 Bytes !
+		} HID_Device1_Collection2_Input_Data_t;						// Taille: 18 Bytes
+
+		//typedef struct {
+		//	HID_Device1_Collection1_Input_Data_t collection1_;			// Taille:  6 Bytes
+		//	HID_Device1_Collection2_Input_Data_t collection2_;			// Taille: 18 Bytes
+		//} HID_Device1_Input_Data_t;							// Total:  24 Bytes
 
 		typedef struct {
 			features_t temperatures_features_;					// Taille: 10 Bytes
@@ -130,9 +142,21 @@ _Pragma("pack(1)")
 	/* Device 2 - AquaComputer High-Flow 2 !						*/
 	#if ENABLED(HIGHFLOW2_DEVICE)
 		typedef struct {
+			uint8_t Event;								// Taille:  1 Byte
+			uint8_t Status;								// Taille:  1 Byte
 			int16_t Temperature;							// Taille:  2 Bytes
+		} HID_Device2_Collection1_Input_Data_t;						// Total:   4 Bytes
+
+		typedef struct {
+			uint8_t Event;								// Taille:  1 Byte
+			uint8_t Status;								// Taille:  1 Byte
 			high_flow_t high_flow_;							// Taille:  2 Bytes
-		} HID_Device2_Input_Data_t;							// Total:   4 Bytes !
+		} HID_Device2_Collection2_Input_Data_t;						// Total:   4 Bytes
+
+		//typedef struct {
+		//	int16_t Temperature;							// Taille:  2 Bytes
+		//	high_flow_t high_flow_;							// Taille:  2 Bytes
+		//} HID_Device2_Input_Data_t;							// Total:   4 Bytes !
 
 		typedef struct {
 			features_t temperatures_features_;					// Taille: 10 Bytes
@@ -158,7 +182,12 @@ _Pragma("pack(1)")
 		typedef struct {
 			firmware_t firmware_;							// Taille:  2 Bytes
 			uint64_t Timestamp;							// Taille:  8 Bytes
-			clock_config_t clock_config_;						// Taille:  1 Byte
+			//clock_config_t clock_config_;						// Taille:  1 Byte
+			//uint8_t Winter;
+			//int8_t GMT;
+			//int8_t DayInputOffset;
+			//int8_t DayOutputOffset;
+			uint8_t Reset;								// Taille:  1 Byte
 		} HID_Device3_Features_Data_t;							// Total:
 	#endif
 _Pragma("pack()")
@@ -231,9 +260,9 @@ typedef struct {
 	#if ENABLED(HIGHFLOW2_DEVICE)
 		scheduler_t HighFlow2_Scheduler;
 	#endif
-	#if ENABLED(SCREEN_DEVICE)
-		uint32_t _screen_timing;
-	#endif
+	//#if ENABLED(SCREEN_DEVICE)
+	//	uint32_t _screen_timing;
+	//#endif
 } manager_t;
 
 
@@ -241,12 +270,12 @@ typedef struct {
 class CLASS_HID_ {
 private:
 	#if ENABLED(SENSORS_DEVICE)
-		HID_Device1_Input_Data_t sensors_interrupt_IN_;
+		//HID_Device1_Input_Data_t sensors_interrupt_IN_;
 		HID_Device1_Features_Data_t sensors_features_;
 	#endif
 
 	#if ENABLED(HIGHFLOW2_DEVICE)
-		HID_Device2_Input_Data_t highflow2_interrupt_IN_;
+		//HID_Device2_Input_Data_t highflow2_interrupt_IN_;
 		HID_Device2_Features_Data_t highflow2_features_;
 	#endif
 
@@ -256,7 +285,7 @@ private:
 		HID_Device3_Features_Data_t screen_features_;
 	#endif
 
-	packed_t _report_Packed;
+	//packed_t _report_Packed;
 	manager_t _manager;
 
 	void loop_InputReport ();
@@ -265,6 +294,7 @@ private:
 
 public:
 	CLASS_HID_ ();
+	void screen_feature_updated ();
 	void begin ();
 	void loop ();
 };

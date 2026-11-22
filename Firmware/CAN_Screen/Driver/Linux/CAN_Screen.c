@@ -27,10 +27,10 @@ MODULE_DESCRIPTION ( "hwmon driver for CAN Screen - Part of Watercooling system 
 #define PULSE_PER_LITER							169
 #define PULSE_PER_TRS							2
 
-#define SENSORSDEVICE_TEMPERATURE_ID					5
-#define SENSORSDEVICE_MONITOR_ID					6
-#define HIGHFLOW2DEVICE_TEMPERATURE_ID					7
-#define HIGHFLOW2DEVICE_FLOW_ID						8
+#define SENSORSDEVICE_TEMPERATURE_ID					1
+#define SENSORSDEVICE_MONITOR_ID					2
+#define HIGHFLOW2DEVICE_TEMPERATURE_ID					3
+#define HIGHFLOW2DEVICE_FLOW_ID						4
 
 #define BOARD_NAME							"CAN Screen board"
 #define SENSORSDEVICE_NAME						"CAN Screen - Sensors"
@@ -40,6 +40,8 @@ MODULE_DESCRIPTION ( "hwmon driver for CAN Screen - Part of Watercooling system 
 #define SENSORS_INTERFACE						2
 #define HIGHFLOW2_INTERFACE						3
 #define SCREEN_INTERFACE						4
+
+static DEFINE_MUTEX ( canscreen_ep0_lock );
 
 enum hid_sensor_powerstate {
 	SENSOR_POWER_STATE_UNDEFINED,
@@ -104,7 +106,7 @@ static int hid_raw_to_speed_convert ( s16 data ) {
 struct canscreen_SensorsFeatures {
 	u8 Connection;
 	u8 PowerState;
-	u8 State;
+	u8 Event;
 	u8 Status;
 	__le32 Interval;
 	__le16 Sensivity;
@@ -478,8 +480,8 @@ static int canscreen_send_report ( struct hid_device *hdev, const u8 id, u8 *dat
 	u8 *buffer;
 	unsigned int retries = 8;
 	int ret;
-	//int alloc_size = size + 1;
-	int alloc_size = 64;
+	int alloc_size = size + 1;
+	//int alloc_size = 64;
 
 	buffer = kzalloc ( alloc_size, GFP_KERNEL );
 	if ( !buffer ) return -ENOMEM;
@@ -539,37 +541,32 @@ static void canscreen_HighFlow2Device_feature_work ( struct work_struct *work ) 
 }
 
 static int canscreen_WakeUp_Collection ( struct hid_device *hdev, u8 report_id, struct canscreen_SensorsFeatures *feature ) {
-	//struct canscreen_SensorsFeatures local_feature;
-	int ret = canscreen_recv_report ( hdev, report_id, ( u8* ) feature, sizeof ( *feature ) );
-	//int ret = canscreen_recv_report ( hdev, report_id, ( u8* ) &local_feature, sizeof ( local_feature ) );
+	int ret;
+	struct canscreen_SensorsFeatures *dummy_feature = NULL;
+	mutex_lock ( &canscreen_ep0_lock );
 
+	ret = canscreen_recv_report ( hdev, report_id, ( u8* ) feature, sizeof ( *feature ) );
+	msleep ( 20 );
 	if ( ret < 0 ) {
 		hid_warn ( hdev, "Impossible de lire l'état initial de la collection %d (err: %d). Configuration par défaut forcée.\n", report_id, ret );
 		memset ( feature, 0, sizeof ( *feature ) );
 		feature -> Connection = 0;					// SENSOR_CONNECTION_TYPE_PC_INTEGRATED
-		feature -> State = 1;						// SENSOR_REPORTING_STATE_REPORT_ALL_EVENTS
+		feature -> Event = 1;						// SENSOR_REPORTING_STATE_REPORT_ALL_EVENTS
 		feature -> Sensivity = cpu_to_le16 ( 10 );
-		//local_feature.Connection = 0;
-		//local_feature.State = 1;
-		//local_feature.Sensivity = cpu_to_le16 ( 10 );
 	}
 	else hid_dbg ( hdev, "État initial collection %d lu: Interval=%u ms, PowerState=%d, Status=%d\n", report_id, le32_to_cpu ( feature -> Interval ), feature -> PowerState, feature -> Status );
 
 	feature -> PowerState = 1;						// SENSOR_POWER_STATE_D0_FULL_POWER
 	feature -> Status = 1;							// SENSOR_STATE_READY
 	feature -> Interval = cpu_to_le32 ( 100 );
-	//local_feature.PowerState = 1;
-	//local_feature.Status = 1;
-	//local_feature.Interval = cpu_to_le32 ( 100 );
 
 	ret = canscreen_send_report ( hdev, report_id, ( u8* ) feature, sizeof ( *feature ) );
-	//ret = canscreen_send_report ( hdev, report_id, ( u8* ) &local_feature, sizeof ( local_feature ) );
+	msleep ( 20 );
 	if ( ret < 0 ) {
 		hid_err ( hdev, "Échec de l'envoi du rapport de réveil à la collection %d: %d\n", report_id, ret );
 		goto fail_exit;
 	}
 
-	struct canscreen_SensorsFeatures *dummy_feature;
 	dummy_feature = kzalloc ( sizeof ( *dummy_feature ), GFP_KERNEL );
 	if ( !dummy_feature ) {
 		hid_err ( hdev, "Impossible d'allouer de la mémoire pour le retour de configuration.\n" );
@@ -578,12 +575,12 @@ static int canscreen_WakeUp_Collection ( struct hid_device *hdev, u8 report_id, 
 	}
 
 	ret = canscreen_recv_report ( hdev, report_id, ( u8* ) dummy_feature, sizeof ( *dummy_feature ) );
+	msleep ( 20 );
 	if ( ret < 0 ) {
 		hid_err ( hdev, "Échec de la lecture de confirmation pour la collection %d: %d\n", report_id, ret );
 		goto free_and_exit;
 	}
 
-	//memcpy ( feature, dummy_feature, sizeof ( *feature ) );
 	if ( feature -> PowerState == dummy_feature -> PowerState && feature -> Status == dummy_feature -> Status && feature -> Interval == dummy_feature -> Interval ) {
 		hid_info ( hdev, "Collection %d interrogée et réveillée avec succès (Power State D0 Full Power + State Ready)\n", report_id );
 	}
@@ -592,6 +589,7 @@ static int canscreen_WakeUp_Collection ( struct hid_device *hdev, u8 report_id, 
 free_and_exit:
 	kfree ( dummy_feature );
 fail_exit:
+	mutex_unlock ( &canscreen_ep0_lock );
 	return ret;
 }
 //END
@@ -659,7 +657,8 @@ static int canscreen_probe ( struct hid_device *hdev, const struct hid_device_id
 		return ret;
 	}
 
-	if ( !strcmp ( hdev -> name, BOARD_NAME ) ) {
+	//if ( !strcmp ( hdev -> name, BOARD_NAME ) ) {
+	if ( !strstr ( hdev -> name, BOARD_NAME ) ) {
 		hid_warn ( hdev, "Périphérique ignoré: Le produit '%s' ne correspond pas à '%s'. \n", hdev -> name ? hdev -> name : "Inconnu", BOARD_NAME );
 		ret = -ENODEV;
 		goto err_stop;
@@ -700,12 +699,6 @@ static int canscreen_probe ( struct hid_device *hdev, const struct hid_device_id
 				sensors -> temp_input [ 0 ] = -ENODATA;
 				sensors -> temp_input [ 1 ] = -ENODATA;
 
-				sensors -> hwmon_dev = devm_hwmon_device_register_with_info ( &hdev -> dev, "can_screen_sensors", sensors, &canscreen_SensorsDevice_chip_info, NULL );
-				if ( IS_ERR ( sensors -> hwmon_dev ) ) {
-					ret = PTR_ERR ( sensors -> hwmon_dev );
-					goto err_stop;
-				}
-
 				canscreen_WakeUp_Collection ( hdev, SENSORSDEVICE_TEMPERATURE_ID, &sensors -> temp_features );
 				sensors -> updated_temp = jiffies;
 
@@ -713,6 +706,12 @@ static int canscreen_probe ( struct hid_device *hdev, const struct hid_device_id
 				sensors -> updated_in = jiffies;
 
 				hid_set_drvdata ( hdev, sensors );
+
+				sensors -> hwmon_dev = devm_hwmon_device_register_with_info ( &hdev -> dev, "can_screen_sensors", sensors, &canscreen_SensorsDevice_chip_info, NULL );
+				if ( IS_ERR ( sensors -> hwmon_dev ) ) {
+					ret = PTR_ERR ( sensors -> hwmon_dev );
+					goto err_stop;
+				}
 				hid_info ( hdev, "Interface '%d' [%s] liée avec succès à hwmon\n", interface_number, SENSORSDEVICE_NAME );
 			}
 			break;
@@ -744,12 +743,6 @@ static int canscreen_probe ( struct hid_device *hdev, const struct hid_device_id
 				highflow2 -> flow_input [ 0 ] = -ENODATA;
 				highflow2 -> flow_input [ 1 ] = -ENODATA;
 
-				highflow2 -> hwmon_dev = devm_hwmon_device_register_with_info ( &hdev -> dev, "aquacomputer_highflow_2", highflow2, &canscreen_HighFlow2Device_chip_info, NULL );
-				if ( IS_ERR ( highflow2 -> hwmon_dev ) ) {
-					ret = PTR_ERR ( highflow2 -> hwmon_dev );
-					goto err_stop;
-				}
-
 				canscreen_WakeUp_Collection ( hdev, HIGHFLOW2DEVICE_TEMPERATURE_ID, &highflow2 -> temp_features );
 				highflow2 -> updated_temp = jiffies;
 
@@ -757,6 +750,12 @@ static int canscreen_probe ( struct hid_device *hdev, const struct hid_device_id
 				highflow2 -> updated_flow = jiffies;
 
 				hid_set_drvdata ( hdev, highflow2 );
+
+				highflow2 -> hwmon_dev = devm_hwmon_device_register_with_info ( &hdev -> dev, "aquacomputer_highflow_2", highflow2, &canscreen_HighFlow2Device_chip_info, NULL );
+				if ( IS_ERR ( highflow2 -> hwmon_dev ) ) {
+					ret = PTR_ERR ( highflow2 -> hwmon_dev );
+					goto err_stop;
+				}
 				hid_info ( hdev, "Interface '%d' [%s] liée avec succès à hwmon\n", interface_number, HIGHFLOW2DEVICE_NAME );
 			}
 			break;
@@ -801,16 +800,17 @@ static int canscreen_raw_event ( struct hid_device *hdev, struct hid_report *rep
 
 				mutex_lock ( &sensors -> mutex );
 				if ( report_id == SENSORSDEVICE_TEMPERATURE_ID ) {
-					if ( size >= 5 ) {
-						s16 raw_chip = ( s16 ) get_unaligned_le16 ( &data [ 1 ] );
-						s16 raw_box = ( s16 ) get_unaligned_le16 ( &data [ 3 ] );
+					if ( size >= 7 ) {
+						// On oublie les deux premiers octets qui correspondent à Event et Status.
+						s16 raw_chip = ( s16 ) get_unaligned_le16 ( &data [ 3 ] );
+						s16 raw_box = ( s16 ) get_unaligned_le16 ( &data [ 5 ] );
 						sensors -> temp_input [ 0 ] = hid_raw_to_milli_degree_celsius_convert ( raw_chip );
 						sensors -> temp_input [ 1 ] = hid_raw_to_milli_degree_celsius_convert ( raw_box );
 					}
 				}
 				if ( report_id == SENSORSDEVICE_MONITOR_ID ) {
-					if ( size >= 17 ) {
-						for ( position = 0, offset = 3; position < 7; position ++, offset += 2 ) {
+					if ( size >= 19 ) {
+						for ( position = 0, offset = 5; position < 7; position ++, offset += 2 ) {
 							sensors -> in_input [ position ] = ( s16 ) get_unaligned_le16 ( &data [ offset ] );
 						}
 					}
@@ -825,14 +825,14 @@ static int canscreen_raw_event ( struct hid_device *hdev, struct hid_report *rep
 
 				mutex_lock ( &highflow2 -> mutex );
 				if ( report_id == HIGHFLOW2DEVICE_TEMPERATURE_ID ) {
-					if ( size >= 3 ) {
-						s16 raw_temp = ( s16 ) get_unaligned_le16 ( &data [ 1 ] );
+					if ( size >= 5 ) {
+						s16 raw_temp = ( s16 ) get_unaligned_le16 ( &data [ 3 ] );
 						highflow2 -> temp_input [ 0 ] = hid_raw_to_milli_degree_celsius_convert ( raw_temp );
 					}
 				}
 				if ( report_id == HIGHFLOW2DEVICE_FLOW_ID ) {
-					if ( size >= 3 ) {
-						s16 raw_flow = ( s16 ) get_unaligned_le16 ( &data [ 1 ] );
+					if ( size >= 5 ) {
+						s16 raw_flow = ( s16 ) get_unaligned_le16 ( &data [ 3 ] );
 						highflow2 -> flow_input [ 0 ] = hid_raw_to_liter_per_hour_convert ( raw_flow );
 						highflow2 -> flow_input [ 1 ] = hid_raw_to_speed_convert ( raw_flow );
 					}

@@ -76,7 +76,7 @@ typedef struct {
 } external_speeds_t;					//						Total:  10 Bytes !
 
 enum : uint8_t {
-	no_feature_ID,
+	no_feature_ID = 0,
 	feature_SensorsTemperature,
 	feature_SensorsMonitor,
 	feature_HighFlow2Temperature,
@@ -92,19 +92,18 @@ enum : uint8_t {
 };
 
 enum : uint8_t {
-	TemperatureFeature_ID = 1,
-	TemperatureInput_ID,
-	MonitorFeature_ID,
-	MonitorInput_ID,
+	No_FeatureReport_ID = 0,
 	Sensors_TemperatureReport_ID,
 	Sensors_MonitorReport_ID,
 	HighFlow2_TemperatureReport_ID,
 	HighFlow2_FlowReport_ID,
-	Firmware_ID = 0x10,
-	TimeStamp_ID = 0x20,
+	Screen_FeatureReport_ID,
+	Screen_OutputReport_ID,
+	Firmware_ID = 0x20,
+	TimeStamp_ID = 0x30,
 	Clock_ID,
 	DayOffset_ID,
-	Screen_ID = 0x30,
+	Screen_ID = 0x40,
 	Dialog_ID,
 	Reset_ID = 0xB5
 };

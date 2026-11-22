@@ -7,6 +7,8 @@
 
 #include "./src/board/macros.h"
 
+#define FIRMWARE_NUMBER					0x0103
+
 #define DEBUG						// Affichage d'informations supplémentaires dans la console
 //#define USE_WATCHDOG					// Utilisation du WatchDog pour éviter un blocage logiciel
 //#define NO_EEPROM					// Désactive la mémoire pour certains tests.
