@@ -8,17 +8,17 @@ CLASS_HID_::CLASS_HID_ () {
 		static HIDSubDescriptor device1Node_ ( _Device1_HIDReportDescriptor, sizeof ( _Device1_HIDReportDescriptor ), SENSORS_DEVICE_NUMBER );
 		customHID_ ().AppendDescriptor ( &device1Node_ );
 
-		this -> sensors_features_.temperatures_features_.Connection = SENSOR_CONNECTION_TYPE_PC_EXTERNAL;
-		this -> sensors_features_.temperatures_features_.PowerState = SENSOR_POWER_STATE_D4_POWER_OFF;
-		this -> sensors_features_.temperatures_features_.Event = SENSOR_REPORTING_STATE_REPORT_ALL_EVENTS;
-		this -> sensors_features_.temperatures_features_.Status = SENSOR_STATE_INITIALIZING;
+		this -> sensors_features_.temperatures_features_.Connection_Type = SENSOR_CONNECTION_TYPE_PC_EXTERNAL;
+		this -> sensors_features_.temperatures_features_.Power_State = SENSOR_POWER_STATE_D4_POWER_OFF;
+		this -> sensors_features_.temperatures_features_.Report_State = SENSOR_REPORTING_STATE_REPORT_ALL_EVENTS;
+		this -> sensors_features_.temperatures_features_.State = SENSOR_STATE_INITIALIZING;
 		this -> sensors_features_.temperatures_features_.Interval = 1000;			// Intervalle entre deux reports ( en millisecondes )
 		this -> sensors_features_.temperatures_features_.Sensivity = 10;
 
-		this -> sensors_features_.voltages_features_.Connection = SENSOR_CONNECTION_TYPE_PC_EXTERNAL;
-		this -> sensors_features_.voltages_features_.PowerState = SENSOR_POWER_STATE_D4_POWER_OFF;
-		this -> sensors_features_.voltages_features_.Event = SENSOR_REPORTING_STATE_REPORT_ALL_EVENTS;
-		this -> sensors_features_.voltages_features_.Status = SENSOR_STATE_INITIALIZING;
+		this -> sensors_features_.voltages_features_.Connection_Type = SENSOR_CONNECTION_TYPE_PC_EXTERNAL;
+		this -> sensors_features_.voltages_features_.Power_State = SENSOR_POWER_STATE_D4_POWER_OFF;
+		this -> sensors_features_.voltages_features_.Report_State = SENSOR_REPORTING_STATE_REPORT_ALL_EVENTS;
+		this -> sensors_features_.voltages_features_.State = SENSOR_STATE_INITIALIZING;
 		this -> sensors_features_.voltages_features_.Interval = 1000;
 		this -> sensors_features_.voltages_features_.Sensivity = 10;
 
@@ -30,17 +30,17 @@ CLASS_HID_::CLASS_HID_ () {
 		static HIDSubDescriptor device2Node_ ( _Device2_HIDReportDescriptor, sizeof ( _Device2_HIDReportDescriptor ), HIGHFLOW2_DEVICE_NUMBER );
 		customHID_ ().AppendDescriptor ( &device2Node_ );
 
-		this -> highflow2_features_.temperatures_features_.Connection = SENSOR_CONNECTION_TYPE_PC_EXTERNAL;
-		this -> highflow2_features_.temperatures_features_.PowerState = SENSOR_POWER_STATE_D4_POWER_OFF;
-		this -> highflow2_features_.temperatures_features_.Event = SENSOR_REPORTING_STATE_REPORT_ALL_EVENTS;
-		this -> highflow2_features_.temperatures_features_.Status = SENSOR_STATE_INITIALIZING;
+		this -> highflow2_features_.temperatures_features_.Connection_Type = SENSOR_CONNECTION_TYPE_PC_EXTERNAL;
+		this -> highflow2_features_.temperatures_features_.Power_State = SENSOR_POWER_STATE_D4_POWER_OFF;
+		this -> highflow2_features_.temperatures_features_.Report_State = SENSOR_REPORTING_STATE_REPORT_ALL_EVENTS;
+		this -> highflow2_features_.temperatures_features_.State = SENSOR_STATE_INITIALIZING;
 		this -> highflow2_features_.temperatures_features_.Interval = 1000;
 		this -> highflow2_features_.temperatures_features_.Sensivity = 10;
 
-		this -> highflow2_features_.flow_struct_.flow_features_.Connection = SENSOR_CONNECTION_TYPE_PC_EXTERNAL;
-		this -> highflow2_features_.flow_struct_.flow_features_.PowerState = SENSOR_POWER_STATE_D4_POWER_OFF;
-		this -> highflow2_features_.flow_struct_.flow_features_.Event = SENSOR_REPORTING_STATE_REPORT_ALL_EVENTS;
-		this -> highflow2_features_.flow_struct_.flow_features_.Status = SENSOR_STATE_INITIALIZING;
+		this -> highflow2_features_.flow_struct_.flow_features_.Connection_Type = SENSOR_CONNECTION_TYPE_PC_EXTERNAL;
+		this -> highflow2_features_.flow_struct_.flow_features_.Power_State = SENSOR_POWER_STATE_D4_POWER_OFF;
+		this -> highflow2_features_.flow_struct_.flow_features_.Report_State = SENSOR_REPORTING_STATE_REPORT_ALL_EVENTS;
+		this -> highflow2_features_.flow_struct_.flow_features_.State = SENSOR_STATE_INITIALIZING;
 		this -> highflow2_features_.flow_struct_.flow_features_.Interval = 1000;
 		this -> highflow2_features_.flow_struct_.flow_features_.Sensivity = 10;
 		memcpy ( &this -> highflow2_features_.flow_struct_.Name, CAN_SCREEN_HIGHFLOW2_FLOW_UTF16, sizeof ( CAN_SCREEN_HIGHFLOW2_FLOW_UTF16 ) );
@@ -85,8 +85,8 @@ void CLASS_HID_::loop_InputReport () {
 					temperatures_t _tmpData;
 					temperatures_.get ( &_tmpData );
 
-					_tmpReport.Event = this -> sensors_features_.temperatures_features_.Event;
-					_tmpReport.Status = this -> sensors_features_.temperatures_features_.Status;
+					_tmpReport.Event = SENSOR_EVENT_DATA_UPDATED;
+					_tmpReport.State = this -> sensors_features_.temperatures_features_.State;
 					_tmpReport.Chip = _tmpData.Convert ( _tmpData.Chip, deg_Celsius );
 					_tmpReport.Box = _tmpData.Convert ( _tmpData.Box, deg_Celsius );
 
@@ -94,61 +94,17 @@ void CLASS_HID_::loop_InputReport () {
 					customHID_ ().sendReport ( Sensors_TemperatureReport_ID, &_tmpReport, sizeof ( _tmpReport ), SENSORS_DEVICE_NUMBER );
 				}
 			}
-			/*if ( _sensors_CollectionToTransmit == First_Collection ) {
-				SerialUSB.println ( "Testing First Collection..." );
-				if ( this -> _report_Packed.Sensors_TemperatureDevice ) {
-					SerialUSB.println ( "First Collection report packed !" );
-					if ( customHID_ ().isReadyToTransmit ( SENSORS_HID_ENDPOINT_NUMBER ) ) {
-						SerialUSB.println ( "Sending First Collection report !" );
-						customHID_ ().sendReport ( Sensors_TemperatureReport_ID, &this -> sensors_interrupt_IN_.collection1_, sizeof ( this -> sensors_interrupt_IN_.collection1_ ), SENSORS_DEVICE_NUMBER );
-						this -> _report_Packed.Sensors_TemperatureDevice = false;
-					}
-				}
-			}
-			else {
-				if ( ( this -> _report_Packed.Sensors_TemperatureDevice == false ) && ( POWERSTATE_TESTING ( &this -> sensors_features_.temperatures_features_ ) == false ) )  {
-					SerialUSB.println ( "Packing Sensors Device Temperature Collection" );
-					temperatures_t _tmpData;
-					temperatures_.get ( &_tmpData );
-
-					this -> sensors_interrupt_IN_.collection1_.Event = 0;
-					this -> sensors_interrupt_IN_.collection1_.Status = 0;
-					this -> sensors_interrupt_IN_.collection1_.Chip = _tmpData.Convert ( _tmpData.Chip, deg_Celsius );
-					this -> sensors_interrupt_IN_.collection1_.Box = _tmpData.Convert ( _tmpData.Box, deg_Celsius );
-					this -> _report_Packed.Sensors_TemperatureDevice = true;
-				}
-			}*/
 
 			if ( _sensors_CollectionToTransmit == Second_Collection ) {
 				if ( customHID_ ().isReadyToTransmit ( SENSORS_HID_ENDPOINT_NUMBER ) ) {
 					HID_Device1_Collection2_Input_Data_t _tmpReport;
 					monitor_.get ( &_tmpReport.voltages_ );
-					_tmpReport.Event = this -> sensors_features_.voltages_features_.Event;
-					_tmpReport.Status = this -> sensors_features_.voltages_features_.Status;
+					_tmpReport.Event = SENSOR_EVENT_DATA_UPDATED;
+					_tmpReport.State = this -> sensors_features_.voltages_features_.State;
 
 					customHID_ ().sendReport ( Sensors_MonitorReport_ID, &_tmpReport, sizeof ( _tmpReport ), SENSORS_DEVICE_NUMBER );
 				}
 			}
-			/*if ( _sensors_CollectionToTransmit == Second_Collection ) {
-				//SerialUSB.println ( "Testing Second Collection..." );
-				if ( this -> _report_Packed.Sensors_MonitorDevice ) {
-					//SerialUSB.println ( "Second Collection report packed !" );
-					if ( customHID_ ().isReadyToTransmit ( SENSORS_HID_ENDPOINT_NUMBER ) ) {
-						//SerialUSB.println ( "Sending Second Collection report !" );
-						customHID_ ().sendReport ( Sensors_MonitorReport_ID, &this -> sensors_interrupt_IN_.collection2_, sizeof ( this -> sensors_interrupt_IN_.collection2_ ), SENSORS_DEVICE_NUMBER );
-						this -> _report_Packed.Sensors_MonitorDevice = false;
-					}
-				}
-			}
-			else {
-				if ( this -> _report_Packed.Sensors_MonitorDevice == false ) {
-					//SerialUSB.println ( "Packing Sensors Device Voltage Collection" );
-					monitor_.get ( &this -> sensors_interrupt_IN_.collection2_.voltages_ );
-					this -> sensors_interrupt_IN_.collection2_.Event = 0;
-					this -> sensors_interrupt_IN_.collection2_.Status = 0;
-					this -> _report_Packed.Sensors_MonitorDevice = true;
-				}
-			}*/
 		#endif
 
 		#if ENABLED(HIGHFLOW2_DEVICE)
@@ -160,55 +116,24 @@ void CLASS_HID_::loop_InputReport () {
 					temperatures_t _tmpData;
 					temperatures_.get ( & _tmpData );
 
-					_tmpReport.Event = this -> highflow2_features_.temperatures_features_.Event;
-					_tmpReport.Status = this -> highflow2_features_.temperatures_features_.Status;
+					_tmpReport.Event = SENSOR_EVENT_DATA_UPDATED;
+					_tmpReport.State = this -> highflow2_features_.temperatures_features_.State;
 					_tmpReport.Temperature = _tmpData.Convert ( _tmpData.Water, deg_Celsius );
 
 					customHID_ ().sendReport ( HighFlow2_TemperatureReport_ID, &_tmpReport, sizeof ( _tmpReport ), HIGHFLOW2_DEVICE_NUMBER );
 				}
 			}
-			/*if ( _highflow2_CollectionToTransmit == First_Collection ) {
-				if ( this -> _report_Packed.HighFlow2_TemperatureDevice ) {
-					if ( customHID_ ().isReadyToTransmit ( HIGHFLOW2_HID_ENDPOINT_NUMBER ) ) {
-						customHID_ ().sendReport ( HighFlow2_TemperatureReport_ID, &this -> highflow2_interrupt_IN_.Temperature, sizeof ( this -> highflow2_interrupt_IN_.Temperature ), HIGHFLOW2_DEVICE_NUMBER );
-						this -> _report_Packed.HighFlow2_TemperatureDevice = false;
-					}
-				}
-			}
-			else {
-				if ( this -> _report_Packed.HighFlow2_TemperatureDevice == false ) {
-					temperatures_t _tmpData;
-					temperatures_.get ( &_tmpData );
-
-					this -> highflow2_interrupt_IN_.Temperature = _tmpData.Convert ( _tmpData.Water, deg_Celsius );
-					this -> _report_Packed.HighFlow2_TemperatureDevice = true;
-				}
-			}*/
 
 			if ( _highflow2_CollectionToTransmit == Second_Collection ) {
 				if ( customHID_ ().isReadyToTransmit ( HIGHFLOW2_HID_ENDPOINT_NUMBER ) ) {
 					HID_Device2_Collection2_Input_Data_t _tmpReport;
 					debimetre_.get ( &_tmpReport.high_flow_ );
-					_tmpReport.Event = this -> highflow2_features_.flow_struct_.flow_features_.Event;
-					_tmpReport.Status = this -> highflow2_features_.flow_struct_.flow_features_.Status;
+					_tmpReport.Event = SENSOR_EVENT_DATA_UPDATED;
+					_tmpReport.State = this -> highflow2_features_.flow_struct_.flow_features_.State;
 
 					customHID_ ().sendReport ( HighFlow2_FlowReport_ID, &_tmpReport, sizeof ( _tmpReport ), HIGHFLOW2_DEVICE_NUMBER );
 				}
 			}
-			/*if ( _highflow2_CollectionToTransmit == Second_Collection ) {
-				if ( this -> _report_Packed.HighFlow2_FlowDevice ) {
-					if ( customHID_ ().isReadyToTransmit ( HIGHFLOW2_HID_ENDPOINT_NUMBER ) ) {
-						customHID_ ().sendReport ( HighFlow2_FlowReport_ID, &this -> highflow2_interrupt_IN_.high_flow_, sizeof ( this -> highflow2_interrupt_IN_.high_flow_ ), HIGHFLOW2_DEVICE_NUMBER );
-						this -> _report_Packed.HighFlow2_FlowDevice = false;
-					}
-				}
-			}
-			else {
-				if ( this -> _report_Packed.HighFlow2_FlowDevice == false ) {
-					debimetre_.get ( &this -> highflow2_interrupt_IN_.high_flow_ );
-					this -> _report_Packed.HighFlow2_FlowDevice = true;
-				}
-			}*/
 		#endif
 
 		/*#if ENABLED(SCREEN_DEVICE)

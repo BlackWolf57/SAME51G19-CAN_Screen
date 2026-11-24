@@ -144,7 +144,7 @@ extern USBDevice_ usbd;
 							this -> setReport_.Type = setup_.wValueH;
 							this -> setReport_.ID = setup_.wValueL;
 							//this -> setReport_.Length = setup_.wLength > EP0_SIZE ? EP0_SIZE : setup_.wLength;
-							if ( setup_.wValueH == HID_FEATURE_REPORT_TYPE ) {
+							/*if ( setup_.wValueH == HID_FEATURE_REPORT_TYPE ) {
 								uint8_t _index;
 								switch ( setup_.wValueL ) {
 									case Sensors_TemperatureReport_ID:
@@ -164,9 +164,13 @@ extern USBDevice_ usbd;
 								}
 								this -> setReport_.Length = this -> featureReport_ [ _index ].Length + 1;
 							}
-							else this -> setReport_.Length = setup_.wLength > EP0_SIZE ? EP0_SIZE : setup_.wLength;
+							else this -> setReport_.Length = setup_.wLength > EP0_SIZE ? EP0_SIZE : setup_.wLength;*/
 
-							USBDevice.recvControl ( this -> setReport_.Report, this -> setReport_.Length );
+							memset ( this -> setReport_.Report, 0, EP0_SIZE );
+							uint16_t _len = ( setup_.wLength > EP0_SIZE ? EP0_SIZE : setup_.wLength );
+							//USBDevice.recvControl ( this -> setReport_.Report, this -> setReport_.Length );
+							USBDevice.recvControl ( this -> setReport_.Report, _len, 64 );
+							this -> setReport_.Length = _len;
 							this -> setReport_.Ready = true;
 						}
 
@@ -468,7 +472,15 @@ extern USBDevice_ usbd;
 			//if ( this -> setReport_.Report [ 0 ] == 0x00 ) return 0;
 
 			uint8_t _length = this -> setReport_.Length - 1;
+			NVIC_DisableIRQ ( USB_0_IRQn );
+			NVIC_DisableIRQ ( USB_1_IRQn );
+			NVIC_DisableIRQ ( USB_2_IRQn );
+			NVIC_DisableIRQ ( USB_3_IRQn );
 			memcpy ( _buffer_, &this -> setReport_.Report [ 1 ], _length );
+			NVIC_EnableIRQ ( USB_0_IRQn );
+			NVIC_EnableIRQ ( USB_1_IRQn );
+			NVIC_EnableIRQ ( USB_2_IRQn );
+			NVIC_EnableIRQ ( USB_3_IRQn );
 			uint8_t* _verif = ( uint8_t* ) _buffer_;
 			//if ( _length > 7 && _verif [ 7 ] == 0x5F ) SerialUSB.println ( "Pollution 0x5F (95ms IIO) détectée sur Interval." );
 			if ( _length > 7 ) {

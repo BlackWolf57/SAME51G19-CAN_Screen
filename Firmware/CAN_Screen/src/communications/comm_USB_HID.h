@@ -16,9 +16,9 @@
 #define HIGHFLOW2_DEVICE_NUMBER		(HIGHFLOW2_HID_INTERFACE_NUMBER - CDC_INTERFACE_COUNT)
 #define SCREEN_DEVICE_NUMBER		(SCREEN_HID_INTERFACE_NUMBER - CDC_INTERFACE_COUNT)
 
-#define POWERSTATE_TESTING(Ptr)		(((Ptr) -> PowerState == SENSOR_POWER_STATE_UNDEFINED) || ((Ptr) -> PowerState == SENSOR_POWER_STATE_D4_POWER_OFF))
-//#define FEATURE_TESTING(Col)		((POWERSTATE_TESTING(Col.feature_Ptr_) == false) && ((Col.feature_Ptr_) -> Status == SENSOR_STATE_READY))
-#define FEATURE_TESTING(Col)		(POWERSTATE_TESTING(Col.feature_Ptr_) == false)
+#define POWERSTATE_TESTING(Ptr)		(((Ptr) -> Power_State == SENSOR_POWER_STATE_UNDEFINED) || ((Ptr) -> Power_State == SENSOR_POWER_STATE_D4_POWER_OFF))
+//#define FEATURE_TESTING(Col)		((POWERSTATE_TESTING(Col.feature_Ptr_) == false) && ((Col.feature_Ptr_) -> State == SENSOR_STATE_READY))
+//#define FEATURE_TESTING(Col)		(POWERSTATE_TESTING(Col.feature_Ptr_) == false)
 
 enum : uint8_t {
 	Free_Collection,
@@ -87,10 +87,10 @@ typedef struct {
 
 _Pragma("pack(1)")
 	typedef struct {
-		uint8_t Connection;								// Taille:  1 Byte
-		uint8_t PowerState;								// Taille:  1 Byte
-		uint8_t Event;									// Taille:  1 Byte
-		uint8_t Status;									// Taille:  1 Byte
+		uint8_t Connection_Type;								// Taille:  1 Byte
+		uint8_t Power_State;								// Taille:  1 Byte
+		uint8_t Report_State;									// Taille:  1 Byte
+		uint8_t State;									// Taille:  1 Byte
 		uint32_t Interval;								// Taille:  4 Bytes
 		uint16_t Sensivity;								// Taille:  2 Bytes
 	} features_t;										// Total:  10 Bytes !
@@ -112,7 +112,7 @@ _Pragma("pack(1)")
 	#if ENABLED(SENSORS_DEVICE)
 		typedef struct {
 			uint8_t Event;								// Taille:  1 Byte
-			uint8_t Status;								// Taille:  1 Byte
+			uint8_t State;								// Taille:  1 Byte
 			union {
 				struct {
 					int16_t Chip;						// Taille: *2 Bytes
@@ -124,14 +124,9 @@ _Pragma("pack(1)")
 
 		typedef struct {
 			uint8_t Event;								// Taille:  1 Byte
-			uint8_t Status;								// Taille:  1 Byte
+			uint8_t State;								// Taille:  1 Byte
 			voltage_t voltages_;							// Taille: 16 Bytes
 		} HID_Device1_Collection2_Input_Data_t;						// Taille: 18 Bytes
-
-		//typedef struct {
-		//	HID_Device1_Collection1_Input_Data_t collection1_;			// Taille:  6 Bytes
-		//	HID_Device1_Collection2_Input_Data_t collection2_;			// Taille: 18 Bytes
-		//} HID_Device1_Input_Data_t;							// Total:  24 Bytes
 
 		typedef struct {
 			features_t temperatures_features_;					// Taille: 10 Bytes
@@ -143,20 +138,15 @@ _Pragma("pack(1)")
 	#if ENABLED(HIGHFLOW2_DEVICE)
 		typedef struct {
 			uint8_t Event;								// Taille:  1 Byte
-			uint8_t Status;								// Taille:  1 Byte
+			uint8_t State;								// Taille:  1 Byte
 			int16_t Temperature;							// Taille:  2 Bytes
 		} HID_Device2_Collection1_Input_Data_t;						// Total:   4 Bytes
 
 		typedef struct {
 			uint8_t Event;								// Taille:  1 Byte
-			uint8_t Status;								// Taille:  1 Byte
+			uint8_t State;								// Taille:  1 Byte
 			high_flow_t high_flow_;							// Taille:  2 Bytes
 		} HID_Device2_Collection2_Input_Data_t;						// Total:   4 Bytes
-
-		//typedef struct {
-		//	int16_t Temperature;							// Taille:  2 Bytes
-		//	high_flow_t high_flow_;							// Taille:  2 Bytes
-		//} HID_Device2_Input_Data_t;							// Total:   4 Bytes !
 
 		typedef struct {
 			features_t temperatures_features_;					// Taille: 10 Bytes
@@ -199,7 +189,7 @@ typedef struct {
 	void set_FeaturePtr ( void* _Ptr_ )				{ this -> feature_Ptr_ = ( features_t* ) _Ptr_; }
 	void set_NewTiming ()						{ this -> Timing = millis (); }
 	void set_NewTiming ( uint8_t _Offset_ )				{ this -> Timing = ( millis () + _Offset_ ); }
-	uint32_t next_Timing ()						{ return ( this -> feature_Ptr_ == nullptr ? this -> Timing : this -> feature_Ptr_ -> Interval + this -> Timing ); }
+	uint32_t next_Timing ()						{ return ( this -> feature_Ptr_ == nullptr ? this -> Timing : ( this -> feature_Ptr_ -> Interval == 0 ? this -> Timing + 1000 : this -> feature_Ptr_ -> Interval + this -> Timing ) ); }
 } timing_t;
 
 typedef struct {
@@ -218,29 +208,20 @@ typedef struct {
 	void update_Timings () {
 		this -> _First_Collection.Timing = millis ();
 		this -> _Second_Collection.Timing = millis ();
-		//SerialUSB.println ( "Scheduler: Update timings" );
 	}
 	uint8_t lastResult () const							{ return this -> _lastResult; }
 	uint8_t operator () () {
 		Report_Collection_t _timing;
 
 		if ( ( this -> _First_Collection.feature_Ptr_ == nullptr ) || ( this -> _Second_Collection.feature_Ptr_ == nullptr ) ) {
-			//SerialUSB.println ( "Scheduler not initialized" );
 			this -> _lastResult = _timing.Report;
 			return this -> _lastResult;
 		}
 
-		if ( FEATURE_TESTING ( this -> _First_Collection ) ) {
-			_timing.First_Report = ( millis () >= this -> _First_Collection.next_Timing () );
-			//SerialUSB.println ( "Scheduler: FEATURE_TESTING = First Collection" );
-		}
-		if ( FEATURE_TESTING ( this -> _Second_Collection ) ) {
-			_timing.Second_Report = ( millis () >= this -> _Second_Collection.next_Timing () );
-			//SerialUSB.println ( "Scheduler: FEATURE_TESTING = Second Collection" );
-		}
+		if ( POWERSTATE_TESTING ( this -> _First_Collection.feature_Ptr_ ) == false ) _timing.First_Report = ( millis () >= this -> _First_Collection.next_Timing () );
+		if ( POWERSTATE_TESTING ( this -> _Second_Collection.feature_Ptr_ ) == false ) _timing.Second_Report = ( millis () >= this -> _Second_Collection.next_Timing () );
 
 		if ( _timing.Report == Both_Collection ) {
-			//SerialUSB.println ( "Scheduler: FEATURE_TESTING = Both Collection. Arbiting !" );
 			this -> _First_Collection.set_NewTiming ();
 			this -> _Second_Collection.set_NewTiming ( 5 );
 			_timing.Report = First_Collection;

@@ -7,6 +7,7 @@
 #include <linux/module.h>
 #include <linux/workqueue.h>
 #include <linux/mutex.h>
+#include <linux/spinlock.h>
 #include <linux/delay.h>
 #include <linux/ktime.h>
 #include <linux/hwmon.h>
@@ -106,7 +107,7 @@ static int hid_raw_to_speed_convert ( s16 data ) {
 struct canscreen_SensorsFeatures {
 	u8 Connection;
 	u8 PowerState;
-	u8 Event;
+	u8 ReportState;
 	u8 Status;
 	__le32 Interval;
 	__le16 Sensivity;
@@ -117,6 +118,7 @@ struct canscreen_SensorDevice {
 	struct hid_device *hdev;
 	struct device *hwmon_dev;
 	struct mutex mutex;
+	spinlock_t spinlock;
 	struct work_struct feature_work;
 
 	struct canscreen_SensorsFeatures in_features;
@@ -129,7 +131,7 @@ struct canscreen_SensorDevice {
 	unsigned long updated_in;
 	unsigned long updated_temp;
 
-	s16 temp_input [ 2 ];
+	int temp_input [ 2 ];
 	u16 in_input [ 7 ];
 
 	const char *const *temp_label;
@@ -140,6 +142,7 @@ struct canscreen_HighFlow2Device {
 	struct hid_device *hdev;
 	struct device *hwmon_dev;
 	struct mutex mutex;
+	spinlock_t spinlock;
 	struct work_struct feature_work;
 	
 	struct canscreen_SensorsFeatures flow_features;
@@ -152,7 +155,7 @@ struct canscreen_HighFlow2Device {
 	unsigned long updated_flow;
 	unsigned long updated_temp;
 	
-	s16 temp_input [ 1 ];
+	int temp_input [ 1 ];
 	int flow_input [ 2 ];
 	
 	const char *const *temp_label;
@@ -204,9 +207,12 @@ static umode_t hwmon_canscreen_HighFlow2Device_is_visible ( const void *data, en
 
 static int hwmon_canscreen_SensorDevice_read ( struct device *dev, enum hwmon_sensor_types type, u32 attr, int channel, long *val ) {
 	struct canscreen_SensorDevice *sensors = dev_get_drvdata ( dev );
+	unsigned long flags;
+	int ret = 0;
 
 	if ( !sensors ) return -ENODEV;
 
+	spin_lock_irqsave ( &sensors -> spinlock, flags );
 	switch ( type ) {
 		case hwmon_temp:
 			if ( time_after ( jiffies, sensors -> updated_temp + msecs_to_jiffies ( sensors -> temp_features.Interval ) ) ) {
@@ -215,12 +221,16 @@ static int hwmon_canscreen_SensorDevice_read ( struct device *dev, enum hwmon_se
 					sensors -> pending_report_id = SENSORSDEVICE_TEMPERATURE_ID;
 					schedule_work ( &sensors -> feature_work );
 				}
-				return -EAGAIN;
+				ret = -EAGAIN;
+				break;
 			}
 
 			switch ( attr ) {
 				case hwmon_temp_input:
-					if ( sensors -> temp_input [ channel ] == -ENODATA ) return -ENODATA;
+					if ( sensors -> temp_input [ channel ] == -ENODATA ) {
+						ret = -ENODATA;
+						break;
+					}
 					*val = sensors -> temp_input [ channel ];
 					break;
 				case hwmon_temp_fault:
@@ -234,8 +244,10 @@ static int hwmon_canscreen_SensorDevice_read ( struct device *dev, enum hwmon_se
 				case hwmon_temp_min_alarm:
 				case hwmon_temp_crit_alarm:
 				case hwmon_temp_lcrit_alarm:
+					ret = -EOPNOTSUPP;
 					break;
 				default:
+					ret = -EOPNOTSUPP;
 					break;
 			}
 			break;
@@ -246,7 +258,8 @@ static int hwmon_canscreen_SensorDevice_read ( struct device *dev, enum hwmon_se
 					sensors -> pending_report_id = SENSORSDEVICE_MONITOR_ID;
 					schedule_work ( &sensors -> feature_work );
 				}
-				return -EAGAIN;
+				ret = -EAGAIN;
+				break;
 			}
 
 			switch ( attr ) {
@@ -261,23 +274,29 @@ static int hwmon_canscreen_SensorDevice_read ( struct device *dev, enum hwmon_se
 				case hwmon_in_min_alarm:
 				case hwmon_in_crit_alarm:
 				case hwmon_in_lcrit_alarm:
+					ret = -EOPNOTSUPP;
 					break;
 				default:
+					ret = -EOPNOTSUPP;
 					break;
 			}
 			break;
 		default:
-			return -EOPNOTSUPP;
+			ret = -EOPNOTSUPP;
 	}
+	spin_unlock_irqrestore ( &sensors -> spinlock, flags );
 
-	return 0;
+	return ret;
 }
 
 static int hwmon_canscreen_HighFlow2Device_read ( struct device *dev, enum hwmon_sensor_types type, u32 attr, int channel, long *val ) {
 	struct canscreen_HighFlow2Device *highflow2 = dev_get_drvdata ( dev );
+	unsigned long flags;
+	int ret = 0;
 
 	if ( !highflow2 ) return -ENODEV;
 
+	spin_lock_irqsave ( &highflow2 -> spinlock, flags );
 	switch ( type ) {
 		case hwmon_temp:
 			if ( time_after ( jiffies, highflow2 -> updated_temp + msecs_to_jiffies ( highflow2 -> temp_features.Interval ) ) ) {
@@ -286,12 +305,16 @@ static int hwmon_canscreen_HighFlow2Device_read ( struct device *dev, enum hwmon
 					highflow2 -> pending_report_id = HIGHFLOW2DEVICE_TEMPERATURE_ID;
 					schedule_work ( &highflow2 -> feature_work );
 				}
-				return -EAGAIN;
+				ret = -EAGAIN;
+				break;
 			}
 
 			switch ( attr ) {
 				case hwmon_temp_input:
-					if ( highflow2 -> temp_input [ channel ] == -ENODATA ) return -ENODATA;
+					if ( highflow2 -> temp_input [ channel ] == -ENODATA ) {
+						ret = -ENODATA;
+						break;
+					}
 					*val = highflow2 -> temp_input [ channel ];
 					break;
 				case hwmon_temp_min:
@@ -302,8 +325,10 @@ static int hwmon_canscreen_HighFlow2Device_read ( struct device *dev, enum hwmon
 				case hwmon_temp_min_alarm:
 				case hwmon_temp_crit_alarm:
 				case hwmon_temp_lcrit_alarm:
+					ret = -EOPNOTSUPP;
 					break;
 				default:
+					ret = -EOPNOTSUPP;
 					break;
 			}
 			break;
@@ -314,7 +339,8 @@ static int hwmon_canscreen_HighFlow2Device_read ( struct device *dev, enum hwmon
 					highflow2 -> pending_report_id = HIGHFLOW2DEVICE_FLOW_ID;
 					schedule_work ( &highflow2 -> feature_work );
 				}
-				return -EAGAIN;
+				ret = -EAGAIN;
+				break;
 			}
 
 			switch ( attr ) {
@@ -329,16 +355,19 @@ static int hwmon_canscreen_HighFlow2Device_read ( struct device *dev, enum hwmon
 				case hwmon_fan_alarm:
 				case hwmon_fan_min_alarm:
 				case hwmon_fan_max_alarm:
+					ret = -EOPNOTSUPP;
 					break;
 				default:
+					ret = -EOPNOTSUPP;
 					break;
 			}
 			break;
 		default:
-			return -EOPNOTSUPP;
+			ret = -EOPNOTSUPP;
 	}
+	spin_unlock_irqrestore ( &highflow2 -> spinlock, flags );
 
-	return 0;
+	return ret;
 }
 
 static int hwmon_canscreen_SensorDevice_read_string ( struct  device *dev, enum hwmon_sensor_types type, u32 attr, int channel, const char **str ) {
@@ -551,7 +580,7 @@ static int canscreen_WakeUp_Collection ( struct hid_device *hdev, u8 report_id, 
 		hid_warn ( hdev, "Impossible de lire l'état initial de la collection %d (err: %d). Configuration par défaut forcée.\n", report_id, ret );
 		memset ( feature, 0, sizeof ( *feature ) );
 		feature -> Connection = 0;					// SENSOR_CONNECTION_TYPE_PC_INTEGRATED
-		feature -> Event = 1;						// SENSOR_REPORTING_STATE_REPORT_ALL_EVENTS
+		feature -> ReportState = 1;						// SENSOR_REPORTING_STATE_REPORT_ALL_EVENTS
 		feature -> Sensivity = cpu_to_le16 ( 10 );
 	}
 	else hid_dbg ( hdev, "État initial collection %d lu: Interval=%u ms, PowerState=%d, Status=%d\n", report_id, le32_to_cpu ( feature -> Interval ), feature -> PowerState, feature -> Status );
@@ -603,6 +632,7 @@ static void canscreen_remove ( struct hid_device *hdev ) {
 	void *data = hid_get_drvdata ( hdev );
 
 	if ( !hid_is_usb ( hdev ) ) {
+		hid_hw_close ( hdev );
 		hid_hw_stop ( hdev );
 		return;
 	}
@@ -623,27 +653,14 @@ static void canscreen_remove ( struct hid_device *hdev ) {
 		}
 	}
 
+	hid_hw_close ( hdev );
 	hid_hw_stop ( hdev );
 }
-
-//static struct hid_driver canscreen_driver;
 
 static int canscreen_probe ( struct hid_device *hdev, const struct hid_device_id *id ) {
 	int ret;
 	struct usb_interface *interface;
 	int interface_number;
-
-	/*if ( hdev -> driver && hdev -> driver != &canscreen_driver ) {
-		struct hid_driver *current_driver = hdev -> driver;
-
-		if ( strcmp ( current_driver -> name, "hid-sensor-hub" ) == 0 ) {
-			hid_info ( hdev, "Détection de hid-sensor-hub. Libération forcée de l'interface...\n" );
-			if ( current_driver -> remove ) current_driver -> remove ( hdev );
-			hdev -> driver = NULL;
-		}
-	}
-
-	hdev -> driver = &canscreen_driver;*/
 
 	ret = hid_parse ( hdev );
 	if ( ret ) {
@@ -651,46 +668,48 @@ static int canscreen_probe ( struct hid_device *hdev, const struct hid_device_id
 		return ret;
 	}
 
-	ret = hid_hw_start ( hdev, HID_CONNECT_HIDRAW );
+	hdev -> quirks |= HID_QUIRK_ALWAYS_POLL;
+	ret = hid_hw_start ( hdev, HID_CONNECT_HIDRAW | HID_CONNECT_DRIVER );
+	//ret = hid_hw_start ( hdev, HID_CONNECT_HIDRAW );
 	if ( ret ) {
 		hid_err ( hdev, "%s: Impossible de démarrer le matériel HID\n", __func__ );
 		return ret;
 	}
 
-	//if ( !strcmp ( hdev -> name, BOARD_NAME ) ) {
+	ret = hid_hw_open ( hdev );
+	if ( ret ) {
+		hid_err ( hdev, "%s: Impossible d'ouvrir le matériel HID\n", __func__ );
+		goto err_stop;
+	}
+
 	if ( !strstr ( hdev -> name, BOARD_NAME ) ) {
 		hid_warn ( hdev, "Périphérique ignoré: Le produit '%s' ne correspond pas à '%s'. \n", hdev -> name ? hdev -> name : "Inconnu", BOARD_NAME );
 		ret = -ENODEV;
-		goto err_stop;
+		goto err_close;
 	}
 
 	if ( !hid_is_usb ( hdev ) ) {
 		ret = -ENODEV;
-		goto err_stop;
+		goto err_close;
 	}
 	interface = to_usb_interface ( hdev -> dev.parent );
 	interface_number = interface -> cur_altsetting -> desc.bInterfaceNumber;
 
 	switch ( interface_number ) {
 		case SENSORS_INTERFACE:
-			/*if ( !strstr ( hdev -> name, SENSORSDEVICE_NAME ) ) {
-				hid_err ( hdev, "Sécurité: L'interface '%d' ne contient pas '%s' (Reçu: '%s')\n", interface_number, SENSORSDEVICE_NAME, hdev -> name ? hdev -> name : "Aucun" );
-				ret = -ENODEV;
-				goto err_stop;
-			}*/
-
 			{
 				struct canscreen_SensorDevice *sensors;
 
 				sensors = devm_kzalloc ( &hdev -> dev, sizeof ( *sensors ), GFP_KERNEL );
 				if ( !sensors ) {
 					ret = -ENOMEM;
-					goto err_stop;
+					goto err_close;
 				}
 
 				sensors -> hdev = hdev;
 				sensors -> connected = true;
 				mutex_init ( &sensors -> mutex );
+				spin_lock_init ( &sensors -> spinlock );
 				INIT_WORK ( &sensors -> feature_work, canscreen_SensorsDevice_feature_work );
 
 				sensors -> temp_label = canscreen_SensorsDevice_temp_labels;
@@ -710,30 +729,25 @@ static int canscreen_probe ( struct hid_device *hdev, const struct hid_device_id
 				sensors -> hwmon_dev = devm_hwmon_device_register_with_info ( &hdev -> dev, "can_screen_sensors", sensors, &canscreen_SensorsDevice_chip_info, NULL );
 				if ( IS_ERR ( sensors -> hwmon_dev ) ) {
 					ret = PTR_ERR ( sensors -> hwmon_dev );
-					goto err_stop;
+					goto err_close;
 				}
 				hid_info ( hdev, "Interface '%d' [%s] liée avec succès à hwmon\n", interface_number, SENSORSDEVICE_NAME );
 			}
 			break;
 		case HIGHFLOW2_INTERFACE:
-			/*if ( !strstr ( hdev -> name, HIGHFLOW2DEVICE_NAME ) ) {
-				hid_err ( hdev, "Sécurité: L'interface '%d' ne contient pas '%s' (Reçu: '%s')\n", interface_number, HIGHFLOW2DEVICE_NAME, hdev -> name ? hdev -> name : "Aucun" );
-				ret = -ENODEV;
-				goto err_stop;
-			}*/
-
 			{
 				struct canscreen_HighFlow2Device *highflow2;
 				
 				highflow2 = devm_kzalloc ( &hdev -> dev, sizeof ( *highflow2 ), GFP_KERNEL );
 				if ( !highflow2 ) {
 					ret = -ENOMEM;
-					goto err_stop;
+					goto err_close;
 				}
 
 				highflow2 -> hdev = hdev;
 				highflow2 -> connected = true;
 				mutex_init ( &highflow2 -> mutex );
+				spin_lock_init ( &highflow2 -> spinlock );
 				INIT_WORK ( &highflow2 -> feature_work, canscreen_HighFlow2Device_feature_work );
 
 				highflow2 -> temp_label = canscreen_HighFlow2Device_labels;
@@ -754,7 +768,7 @@ static int canscreen_probe ( struct hid_device *hdev, const struct hid_device_id
 				highflow2 -> hwmon_dev = devm_hwmon_device_register_with_info ( &hdev -> dev, "aquacomputer_highflow_2", highflow2, &canscreen_HighFlow2Device_chip_info, NULL );
 				if ( IS_ERR ( highflow2 -> hwmon_dev ) ) {
 					ret = PTR_ERR ( highflow2 -> hwmon_dev );
-					goto err_stop;
+					goto err_close;
 				}
 				hid_info ( hdev, "Interface '%d' [%s] liée avec succès à hwmon\n", interface_number, HIGHFLOW2DEVICE_NAME );
 			}
@@ -763,7 +777,7 @@ static int canscreen_probe ( struct hid_device *hdev, const struct hid_device_id
 			/*if ( !strstr ( hdev -> name, SCREENDEVICE_NAME ) ) {
 				hid_err ( hdev, "Sécurité: L'interface '%d' ne contient pas '%s' (Reçu: '%s')\n", interface_number, SCREENDEVICE_NAME, hdev -> name ? hdev -> name : "Aucun" );
 				ret = -ENODEV;
-				goto err_stop;
+				goto err_close;
 			}*/
 
 			hid_info ( hdev, "Interface '%d' [%s] détectée et initialisée\n", interface_number, SCREENDEVICE_NAME );
@@ -771,11 +785,13 @@ static int canscreen_probe ( struct hid_device *hdev, const struct hid_device_id
 		default:
 			hid_warn ( hdev, "Interface HID inconnue détectée: %d. Ignorée.\n", interface_number );
 			ret = -ENODEV;
-			goto err_stop;
+			goto err_close;
 	}
 
 	return 0;
 
+err_close:
+	hid_hw_close ( hdev );
 err_stop:
 	hid_hw_stop ( hdev );
 	return ret;
@@ -783,8 +799,10 @@ err_stop:
 
 static int canscreen_raw_event ( struct hid_device *hdev, struct hid_report *report, u8 *data, int size ) {
 	struct usb_interface *interface;
+	unsigned long flags;
 	int interface_number;
 	u8 report_id = data [ 0 ];
+	hid_info_once(hdev, "raw_event reçu: id=%d size=%d\n", data[0], size);
 	u8 position, offset;
 	//bool dynamic_feature_triggered = false;
 
@@ -798,14 +816,16 @@ static int canscreen_raw_event ( struct hid_device *hdev, struct hid_report *rep
 				struct canscreen_SensorDevice *sensors = hid_get_drvdata ( hdev );
 				if ( !sensors ) return 0;
 
-				mutex_lock ( &sensors -> mutex );
+				//mutex_lock ( &sensors -> mutex );
+				spin_lock_irqsave ( &sensors -> spinlock, flags );
 				if ( report_id == SENSORSDEVICE_TEMPERATURE_ID ) {
 					if ( size >= 7 ) {
-						// On oublie les deux premiers octets qui correspondent à Event et Status.
+						// On oublie les deux premiers octets qui correspondent à ReportState et Status.
 						s16 raw_chip = ( s16 ) get_unaligned_le16 ( &data [ 3 ] );
 						s16 raw_box = ( s16 ) get_unaligned_le16 ( &data [ 5 ] );
 						sensors -> temp_input [ 0 ] = hid_raw_to_milli_degree_celsius_convert ( raw_chip );
 						sensors -> temp_input [ 1 ] = hid_raw_to_milli_degree_celsius_convert ( raw_box );
+						sensors -> updated_temp = jiffies;
 					}
 				}
 				if ( report_id == SENSORSDEVICE_MONITOR_ID ) {
@@ -813,9 +833,11 @@ static int canscreen_raw_event ( struct hid_device *hdev, struct hid_report *rep
 						for ( position = 0, offset = 5; position < 7; position ++, offset += 2 ) {
 							sensors -> in_input [ position ] = ( s16 ) get_unaligned_le16 ( &data [ offset ] );
 						}
+						sensors -> updated_in = jiffies;
 					}
 				}
-				mutex_unlock ( &sensors -> mutex );
+				//mutex_unlock ( &sensors -> mutex );
+				spin_unlock_irqrestore ( &sensors -> spinlock, flags );
 				break;
 			}
 		case HIGHFLOW2_INTERFACE:
@@ -823,11 +845,13 @@ static int canscreen_raw_event ( struct hid_device *hdev, struct hid_report *rep
 				struct canscreen_HighFlow2Device *highflow2 = hid_get_drvdata ( hdev );
 				if ( !highflow2 ) return 0;
 
-				mutex_lock ( &highflow2 -> mutex );
+				//mutex_lock ( &highflow2 -> mutex );
+				spin_lock_irqsave ( &highflow2 -> spinlock, flags );
 				if ( report_id == HIGHFLOW2DEVICE_TEMPERATURE_ID ) {
 					if ( size >= 5 ) {
 						s16 raw_temp = ( s16 ) get_unaligned_le16 ( &data [ 3 ] );
 						highflow2 -> temp_input [ 0 ] = hid_raw_to_milli_degree_celsius_convert ( raw_temp );
+						highflow2 -> updated_temp = jiffies;
 					}
 				}
 				if ( report_id == HIGHFLOW2DEVICE_FLOW_ID ) {
@@ -835,9 +859,11 @@ static int canscreen_raw_event ( struct hid_device *hdev, struct hid_report *rep
 						s16 raw_flow = ( s16 ) get_unaligned_le16 ( &data [ 3 ] );
 						highflow2 -> flow_input [ 0 ] = hid_raw_to_liter_per_hour_convert ( raw_flow );
 						highflow2 -> flow_input [ 1 ] = hid_raw_to_speed_convert ( raw_flow );
+						highflow2 -> updated_flow = jiffies;
 					}
 				}
-				mutex_unlock ( &highflow2 -> mutex );
+				//mutex_unlock ( &highflow2 -> mutex );
+				spin_unlock_irqrestore ( &highflow2 -> spinlock, flags );
 				break;
 			}
 		//case SCREEN_INTERFACE:
@@ -845,57 +871,7 @@ static int canscreen_raw_event ( struct hid_device *hdev, struct hid_report *rep
 		//	break;
 	}
 
-	return 0;
-
-	/*switch ( report_id ) {
-		case SENSORSDEVICE_TEMPERATURE_ID:
-			{
-				struct canscreen_SensorDevice *sensors = hid_get_drvdata ( hdev );
-				if ( !sensors || size < 5 ) return 0;
-
-				s16 raw_chip = ( s16 ) get_unaligned_le16 ( &data [ 1 ] );
-				s16 raw_box = ( s16 ) get_unaligned_le16 ( &data [ 3 ] );
-				sensors -> temp_input [ 0 ] = hid_raw_to_milli_degree_celsius_convert ( raw_chip );
-				sensors -> temp_input [ 1 ] = hid_raw_to_milli_degree_celsius_convert ( raw_box );
-				break;
-			}
-		case SENSORSDEVICE_MONITOR_ID:
-			{
-				struct canscreen_SensorDevice * sensors = hid_get_drvdata ( hdev );
-				if ( !sensors || size < 17 ) return 0;
-
-				for ( position = 0, offset = 3; position < 7; position ++, offset += 2 ) {
-					sensors -> in_input [ position ] = get_unaligned_le16 ( &data [ offset ] );
-				}
-				break;
-			}
-		case HIGHFLOW2DEVICE_TEMPERATURE_ID:
-			{
-				struct canscreen_HighFlow2Device *highflow2 = hid_get_drvdata ( hdev );
-				if ( !highflow2 || size < 3 ) return 0;
-
-				s16 raw_temp = ( s16 ) get_unaligned_le16 ( &data [ 1 ] );
-				highflow2 -> temp_input [ 0 ] = hid_raw_to_milli_degree_celsius_convert ( raw_temp );
-				break;
-			}
-		case HIGHFLOW2DEVICE_FLOW_ID:
-			{
-				struct canscreen_HighFlow2Device *highflow2 = hid_get_drvdata ( hdev );
-				if ( !highflow2 || size < 3 ) return 0;
-
-				s16 raw_flow = ( s16 ) get_unaligned_le16 ( &data [ 1 ] );
-				highflow2 -> flow_input [ 0 ] = hid_raw_to_liter_per_hour_convert ( raw_flow );
-				highflow2 -> flow_input [ 1 ] = hid_raw_to_speed_convert ( raw_flow );
-				break;
-			}
-		//case ?:
-		//	if ( dynamic_feature_triggered ) schedule_work ( &devine3 -> feature_work );
-		//	break;
-		default:
-			return 0;
-	}
-
-	return 1;*/
+	return 1;
 }
 
 /*static __u8 *canscreen_report_fixup ( struct hid_device *hdev, __u8 *rdesc, unsigned int *rsize ) {
